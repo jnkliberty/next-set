@@ -1,0 +1,25 @@
+.builder-days,.builder-source,.copy-targets{border:0;margin:24px 0;padding:0}
+.builder-days legend,.builder-source legend,.copy-targets legend{margin-bottom:8px;font-weight:600}
+.builder-days .weekday-controls{display:grid;grid-template-columns:repeat(7,minmax(44px,1fr));gap:4px}
+.builder-days .weekday-controls button{min-width:44px;min-height:44px;padding:8px 0;font-size:13px}
+.source-choice,.copy-targets label,.overwrite-check{display:flex;align-items:center;gap:16px;min-height:56px;padding:8px 16px;background:var(--card);margin:8px 0}
+.sheet .source-choice input[type=radio],.sheet .copy-targets input,.sheet .overwrite-check input{width:24px;min-height:24px;height:24px;padding:0;flex:none;margin:0;accent-color:var(--accent)}
+.copy-mapping{margin:16px 0 24px;color:var(--ink-muted);font-size:15px}
+.week-grid-section{margin:24px 0}
+.week-grid-section>p{font-size:13px}
+.week-grid-scroll{overflow-x:auto;margin:8px 0 24px}
+.week-grid{width:100%;border-collapse:separate;border-spacing:4px;font-size:13px;text-align:center}
+.week-grid th{font-weight:600;padding:4px}
+.week-grid td{padding:0;min-width:44px}
+.week-grid td button{min-width:44px;width:100%;min-height:44px;background:var(--fill);border-radius:8px}
+.week-grid td button.filled{background:var(--accent-soft);color:var(--ink);font-weight:700}
+.day-editor-row{display:flex;align-items:stretch}
+.day-editor-row>.list-row{flex:1;text-align:left}
+.drag-handle{width:44px;min-height:56px;flex:none;padding:0;cursor:grab;color:var(--ink-muted);font-size:22px;touch-action:none}
+.day-editor-row.drag-over{outline:2px solid var(--accent);outline-offset:-2px}
+.superset-mark{display:block;font-size:13px;color:var(--ink);font-weight:600;margin-bottom:4px}
+.day-name{margin:24px 0}
+
+@media(max-width:379px){.builder-days .weekday-controls{grid-template-columns:repeat(4,minmax(44px,1fr))}}
+
+.day-editor-row .more{flex:none;width:24px;text-align:center}

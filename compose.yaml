@@ -1,0 +1,19 @@
+services:
+  workout:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18081:18081"
+    environment:
+      APP_ORIGIN: ${WORKOUT_APP_ORIGIN:-http://127.0.0.1:18081}
+    volumes:
+      - training_data:/app/data
+      - training_backups:/app/backups
+    healthcheck:
+      test: ["CMD", "node", "scripts/healthcheck.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  training_data:
+  training_backups:
