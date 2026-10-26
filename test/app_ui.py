@@ -82,6 +82,7 @@ def run(engine, url):
         first_logged=[r for r in rows(page,'set') if r.get('done_at') and not r['id'].startswith('past-')]
         assert len(first_logged)==1, {'count':len(first_logged),'alerts':page.get_by_role('alert').all_text_contents(),'errors':errors}
         assert first_logged[0]['weight']==0.75 and first_logged[0]['grams']==750, 'A comma decimal must save as 0.75 kg'
+        expect(page.locator('.bar-link.end')).to_have_text(f"{len(rows(page,'outbox'))} waiting")
         context.set_offline(False)
         page.request.post(url+'/__stop')
         started=perf_counter()
@@ -122,6 +123,7 @@ def run(engine, url):
         while rows(page,'outbox'):
             assert monotonic()<deadline,'The outbox did not drain after reconnect'
             page.wait_for_timeout(50)
+        expect(page.locator('header.app-top .status')).to_have_text('Saved')
         server=page.request.get(url+'/api/changes?since=0').json()['rows']
         saved=[item['row'] for item in server if item['table']=='set' and item['row'].get('done_at') and not item['row']['id'].startswith('past-')]
         assert len(saved)==6, {'engine':engine.name,'remote':len(saved),'local':len(logged),'pending':len(rows(page,'outbox'))}
@@ -264,6 +266,7 @@ def verify_extra_sets(engine,url):
     try:
         page=context.new_page();page.goto(url)
         page.get_by_role('button',name=re.compile('Sample Strength')).click()
+        page.get_by_role('button',name=re.compile(r'^Start Day \d+$')).wait_for()
         before={table:rows(page,table) for table in ['program','program_day','slot','slot_set','run']}
         page.get_by_role('navigation',name='Main').get_by_role('button',name='Calendar',exact=True).click()
         page.locator('.calendar-day.today').click()
@@ -285,7 +288,8 @@ def verify_extra_sets(engine,url):
             if i==0:page.get_by_role('button',name='Skip',exact=True).click()
         page.get_by_role('heading',name='Workout complete',exact=True).wait_for()
         assert not any(r['kind']=='done' for r in rows(page,'run_event'))
-        assert {table:rows(page,table) for table in before}==before
+        after={table:rows(page,table) for table in before}
+        assert after==before,{table:{'before_count':len(before[table]),'after_count':len(after[table]),'changed':[row for row in after[table] if row not in before[table]]} for table in before if before[table]!=after[table]}
         page.get_by_role('button',name='Done',exact=True).click()
         page.get_by_role('navigation',name='Main').get_by_role('button',name='Calendar',exact=True).click()
         assert 'added' in page.locator('.calendar-day.today').get_attribute('class')

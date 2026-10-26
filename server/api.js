@@ -5,6 +5,8 @@ import { dailySummary } from '../domain/metrics.js';
 import { fingerprints } from '../domain/fingerprint.js';
 import { serveStatic } from './static.js';
 import { dailyIntegration, integrationRevision, sameCredential, validHealthAdvisory } from './integration.js';
+import { validBodyWeightSeries, validWeightRange } from '../domain/body-weight.js';
+import { healthAppUrl, readBodyLimited } from './body-weight.js';
 
 function send(response, status, body) {
   response.writeHead(status, {
@@ -54,6 +56,64 @@ function allowWrite(request, origin) {
     && /^application\/json(?:\s*;|$)/i.test(request.headers['content-type'] || '');
 }
 
+async function bodyWeightRoute(request, response, url) {
+  if (request.method !== 'GET' || request.headers['content-length'] && request.headers['content-length'] !== '0' || request.headers['transfer-encoding']) return send(response, 400, { error: 'Invalid request' });
+  const params = [...url.searchParams.entries()], from = url.searchParams.get('from'), to = url.searchParams.get('to');
+  if (params.length !== 2 || new Set(params.map(([key]) => key)).size !== 2 || params.some(([key]) => !['from', 'to'].includes(key)) || !validWeightRange(from, to)) return send(response, 400, { error: 'Invalid date range' });
+  const token = process.env.HEALTH_WEIGHT_TOKEN, subjectId = process.env.INTEGRATION_SUBJECT_ID, base = process.env.HEALTH_INTEGRATION_URL;
+  if (!token || !subjectId || !base) return send(response, 200, { configured: false });
+  const link = healthAppUrl(process.env.HEALTH_APP_URL);
+  try {
+    const endpoint = new URL('/api/integration/v1/body-weight', base);
+    if (!['http:', 'https:'].includes(endpoint.protocol) || endpoint.username || endpoint.password) throw new Error();
+    endpoint.search = new URLSearchParams({ from, to }).toString();
+    const upstream = await fetch(endpoint, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000), redirect: 'error' });
+    if (!upstream.ok) throw new Error();
+    const raw = await readBodyLimited(upstream, 1048576), series = JSON.parse(raw);
+    if (!validBodyWeightSeries(series, subjectId, from, to)) throw new Error();
+    return send(response, 200, { configured: true, available: true, subjectId, series, ...(link ? { healthAppUrl: link } : {}) });
+  } catch {
+    return send(response, 200, { configured: true, available: false, subjectId, ...(link ? { healthAppUrl: link } : {}) });
+  }
+}
+
+function dailyIntegrationRoute(request, response, url, store) {
+  if (!['GET'].includes(request.method) || request.headers['content-length'] && request.headers['content-length'] !== '0' || request.headers['transfer-encoding']) return send(response, 405, { error: 'GET without a body required' });
+  const token = request.headers.authorization?.startsWith('Bearer ') ? request.headers.authorization.slice(7) : '';
+  if (!sameCredential(process.env.WORKOUT_INTEGRATION_TOKEN, token)) return send(response, 401, { error: 'Unauthorized' });
+  const params = [...url.searchParams.entries()];
+  if (params.length !== 2 || new Set(params.map(([key]) => key)).size !== 2 || params.some(([key]) => !['from', 'to'].includes(key))) return send(response, 400, { error: 'Invalid query' });
+  const from = url.searchParams.get('from'), to = url.searchParams.get('to');
+  const valid = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+  if (!valid(from) || !valid(to) || from > to || (Date.parse(to) - Date.parse(from)) / 86400000 >= 366) return send(response, 400, { error: 'Invalid date range' });
+  const subjectId = process.env.INTEGRATION_SUBJECT_ID;
+  if (!subjectId) return send(response, 503, { error: 'Integration unavailable' });
+  const data = Object.fromEntries(tables.map(table => [table, store.rows(table)]));
+  const now = Date.now();
+  const result = dailyIntegration(data, from, to, subjectId, integrationRevision(store.revision(), now), now);
+  if (Buffer.byteLength(JSON.stringify(result)) > 5 * 1024 * 1024) return send(response, 413, { error: 'Summary too large' });
+  return send(response, 200, result);
+}
+
+async function healthContextRoute(request, response, url) {
+  if (request.method !== 'GET' || url.search || request.headers['content-length'] && request.headers['content-length'] !== '0' || request.headers['transfer-encoding']) return send(response, 400, { available: false, reason: 'Invalid request' });
+  const token = process.env.HEALTH_ADVISORY_TOKEN, subjectId = process.env.INTEGRATION_SUBJECT_ID;
+  if (!token || !subjectId) return send(response, 200, { available: false, reason: 'Health guidance is not connected.' });
+  try {
+    const base = process.env.HEALTH_INTEGRATION_URL;
+    if (!base) throw new Error();
+    const endpoint = new URL('/api/integration/v1/advisory', base);
+    if (!['http:', 'https:'].includes(endpoint.protocol)) throw new Error();
+    const upstream = await fetch(endpoint, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000), redirect: 'error' });
+    if (!upstream.ok) throw new Error();
+    const raw = await upstream.text();
+    if (raw.length > 65536) throw new Error();
+    const value = JSON.parse(raw);
+    if (!validHealthAdvisory(value, subjectId)) throw new Error();
+    return send(response, 200, { available: true, advisory: value });
+  } catch { return send(response, 200, { available: false, reason: 'Health guidance is unavailable. Try again while connected.' }); }
+}
+
 export function createApi(store, { origin } = {}) {
   if (origin && new URL(origin).origin !== origin) throw new Error('Invalid app origin');
   const rates = new Map();
@@ -68,42 +128,10 @@ export function createApi(store, { origin } = {}) {
       const count = (rates.get(address) || 0) + 1;
       rates.set(address, count);
       if (count > 1200) return send(response, 429, { error: 'Too many requests' });
-      if (integrationRoute) {
-        if (!['GET'].includes(request.method) || request.headers['content-length'] && request.headers['content-length'] !== '0' || request.headers['transfer-encoding']) return send(response, 405, { error: 'GET without a body required' });
-        const token = request.headers.authorization?.startsWith('Bearer ') ? request.headers.authorization.slice(7) : '';
-        if (!sameCredential(process.env.WORKOUT_INTEGRATION_TOKEN, token)) return send(response, 401, { error: 'Unauthorized' });
-        const params = [...url.searchParams.entries()];
-        if (params.length !== 2 || new Set(params.map(([key]) => key)).size !== 2 || params.some(([key]) => !['from', 'to'].includes(key))) return send(response, 400, { error: 'Invalid query' });
-        const from = url.searchParams.get('from'), to = url.searchParams.get('to');
-        const valid = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
-        if (!valid(from) || !valid(to) || from > to || (Date.parse(to) - Date.parse(from)) / 86400000 >= 366) return send(response, 400, { error: 'Invalid date range' });
-        const subjectId = process.env.INTEGRATION_SUBJECT_ID;
-        if (!subjectId) return send(response, 503, { error: 'Integration unavailable' });
-        const data = Object.fromEntries(tables.map(table => [table, store.rows(table)]));
-        const now = Date.now();
-        const result = dailyIntegration(data, from, to, subjectId, integrationRevision(store.revision(), now), now);
-        if (Buffer.byteLength(JSON.stringify(result)) > 5 * 1024 * 1024) return send(response, 413, { error: 'Summary too large' });
-        return send(response, 200, result);
-      }
+      if (integrationRoute) return dailyIntegrationRoute(request, response, url, store);
       if (request.method === 'GET' && url.pathname === '/api/health') return send(response, 200, { ok: true });
-      if (url.pathname === '/api/health-context') {
-        if (request.method !== 'GET' || url.search || request.headers['content-length'] && request.headers['content-length'] !== '0' || request.headers['transfer-encoding']) return send(response, 400, { available: false, reason: 'Invalid request' });
-        const token = process.env.HEALTH_ADVISORY_TOKEN, subjectId = process.env.INTEGRATION_SUBJECT_ID;
-        if (!token || !subjectId) return send(response, 200, { available: false, reason: 'Health guidance is not connected.' });
-        try {
-          const base = process.env.HEALTH_INTEGRATION_URL;
-          if (!base) throw new Error();
-          const endpoint = new URL('/api/integration/v1/advisory', base);
-          if (!['http:', 'https:'].includes(endpoint.protocol)) throw new Error();
-          const upstream = await fetch(endpoint, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000), redirect: 'error' });
-          if (!upstream.ok) throw new Error();
-          const raw = await upstream.text();
-          if (raw.length > 65536) throw new Error();
-          const value = JSON.parse(raw);
-          if (!validHealthAdvisory(value, subjectId)) throw new Error();
-          return send(response, 200, { available: true, advisory: value });
-        } catch { return send(response, 200, { available: false, reason: 'Health guidance is unavailable. Try again while connected.' }); }
-      }
+      if (url.pathname === '/api/health-context') return await healthContextRoute(request, response, url);
+      if (url.pathname === '/api/body-weight') return await bodyWeightRoute(request, response, url);
       if (request.method === 'GET' && url.pathname === '/api/summary/daily') {
         const from = url.searchParams.get('from'), to = url.searchParams.get('to');
         const valid = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;

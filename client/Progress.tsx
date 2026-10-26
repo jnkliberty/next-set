@@ -4,6 +4,8 @@ import { live } from '../domain/model.js';
 import { addDays, todayDate } from '../domain/calendar.js';
 import { BODY_AREAS, areaWork, liftSeries, matchesArea, progressData, progressRange, strengthChange } from '../domain/progress.js';
 import { ActivityCalendar, StrengthChart, WorkChart, Sparkline } from './ProgressCharts';
+import { BodyWeight } from './BodyWeight';
+import { weightHistoryStart } from '../domain/body-weight.js';
 import { Row, dateText } from './ui';
 import './progress.css';
 
@@ -93,11 +95,14 @@ function PeriodDetails({ data, progress }: any) {
   </dl>{previous && <><h3>Previous {length} days</h3><p className="chart-note">{previous.sessions} sessions · {count(previous.sets)} working sets · {count(previous.minutes)} minutes</p></>}{total.incompleteVolume && <p className="chart-note">Volume excludes unreviewed imported loads and sets without the required load or body-weight reading.</p>}</details>;
 }
 
-export function Progress({ data, showSession }: any) {
+export function Progress({ data, showSession, local }: any) {
   const today = todayDate(), [range, setRange] = useState('12w'), [area, setArea] = useState('All areas');
   const [secondary, setSecondary] = useState(false), [muscle, setMuscle] = useState(''), [lift, setLift] = useState('');
-  const earliest = live(data.session).map((row: Row) => row.local_date).sort()[0] ?? today;
+  const [weightEarliest, setWeightEarliest] = useState<string | null>(null);
+  const workoutEarliest = live(data.session).map((row: Row) => row.local_date).sort()[0] ?? today;
+  const earliest = range === 'all' && weightEarliest && weightEarliest < workoutEarliest ? weightEarliest : workoutEarliest;
   const [from, to] = progressRange(range, today, earliest);
+  const requestFrom = range === 'all' ? weightHistoryStart(today) : from;
   const progress = useMemo(() => progressData(data, from, to), [data, from, to]);
   const lifts = progress.lifts.filter(row => matchesArea(row, area, secondary, muscle));
   const selected = lifts.find(row => row.id === lift) ?? lifts.find(row => liftSeries(row, 'estimate').length) ?? lifts[0];
@@ -119,7 +124,7 @@ export function Progress({ data, showSession }: any) {
         </div>
       </section>
       <section className="progress-panel strength-panel" aria-label="Lift progress">{selected ? <><LiftDetail key={selected.id} lift={selected} from={from} to={to} showSession={showSession}/><LiftList key={area+muscle} lifts={lifts} selected={selected.id} select={setLift}/></> : <div className="chart-empty"><h2>{total.sessions ? 'No lifts in this selection' : 'Your progress starts with a session'}</h2><p>{total.sessions ? 'Choose another area or a longer date range.' : 'Finish a workout to see your lifts and training history here.'}</p></div>}</section>
-      <div className="progress-support"><WeeklyWork progress={progress} area={area} secondary={secondary} muscle={muscle}/><PeriodDetails data={data} progress={progress}/></div>
+      <div className="progress-support"><WeeklyWork progress={progress} area={area} secondary={secondary} muscle={muscle}/><PeriodDetails data={data} progress={progress}/><BodyWeight local={local} from={from} to={to} requestFrom={requestFrom} allHistory={range === 'all'} onHistoryEarliest={setWeightEarliest}/></div>
       <ActivityCalendar progress={progress} allHistory={range === 'all'} chooseYear={setRange} showSession={showSession}/>
     </div>
   </>;

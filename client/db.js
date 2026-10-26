@@ -193,7 +193,10 @@ export async function openLocal(changed = (_event) => {}) {
   }
 
   return { db, device, snapshot, save, record, sync, check, resend, drafts,
-    async status() { return { waiting: await db.count('outbox'), events: await db.count('event_queue'), check: await db.get('meta', 'count_check'), error: await db.get('meta', 'sync_error') }; },
+    async status() {
+      const [waiting, events, check, error] = await Promise.all([db.count('outbox'), db.count('event_queue'), db.get('meta', 'count_check'), db.get('meta', 'sync_error')]);
+      return { waiting, events, check, error };
+    },
     close() { window.removeEventListener('beforeunload', leaving); channel.close(); db.close(); },
   };
 }

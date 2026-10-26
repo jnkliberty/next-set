@@ -3,10 +3,12 @@ import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 export type Row = Record<string, any>;
 export const numberText = (value: number | null) => value == null ? '' : String(Number(value.toFixed(2)));
 export const rangeText = (low: number | null, high: number | null) => low == null ? 'To failure' : low === high ? `${low}` : `${low} to ${high}`;
+const localDateFormatter = new Intl.DateTimeFormat('en-US', { weekday:'short', day:'numeric', month:'short', timeZone:'America/Chicago' });
+const utcDateFormatter = new Intl.DateTimeFormat('en-US', { weekday:'short', day:'numeric', month:'short', timeZone:'UTC' });
 export function dateText(value: string | number | null) {
   if (value == null) return '';
   const date = new Date(typeof value === 'number' ? value : `${value}T12:00:00Z`);
-  const parts = new Intl.DateTimeFormat('en-US', { weekday:'short', day:'numeric', month:'short', timeZone:typeof value==='number'?'America/Chicago':'UTC' }).formatToParts(date);
+  const parts = (typeof value === 'number' ? localDateFormatter : utcDateFormatter).formatToParts(date);
   const part = (type:string) => parts.find(value=>value.type===type)?.value;
   return `${part('weekday')} ${part('day')} ${part('month')}`;
 }

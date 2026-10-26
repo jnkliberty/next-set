@@ -120,7 +120,7 @@ export function Logger({ data, local, session, back, changed, fail, openSession,
       await local.record('logged', { saveMs: performance.now() - start, taps: taps.current, seconds: elapsed, weight: row.weight, reps: row.reps }, { session_id: session.id, set_id: set.id });
       taps.current = 0; touched.current = null; toggled.current.set(set.id, Date.now());
       drafts.forget(set);
-      setLarge(null); local.sync(); changed();
+      setLarge(null); local.sync();
     } catch (error) { fail(error.message || 'This set did not save. Keep this screen open and try again.'); changed(); }
     finally { saving.current = false; setBusy(false); }
   }

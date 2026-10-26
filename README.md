@@ -2,14 +2,17 @@
 
 A private workout tracker for logging sets and seeing progress. React on the phone, SQLite on your server, and a local browser copy for offline use.
 
-**Status: in progress.** Set logging, supersets, saved drafts, body-area filters, and Progress charts have automated Chromium and WebKit checks. A physical iPhone workout trial remains. Historical imports still require review. Dated body-weight charts are not built.
+**Status: in progress.** Set logging, supersets, saved drafts, body-area filters, and Progress charts have automated Chromium and WebKit checks. A physical iPhone workout trial remains. Historical imports still require review. Optional dated body-weight charts are implemented; they need a compatible Health service.
 
 ![Progress with invented Bench Press history, weekly work, and an activity calendar](progress.png)
 
 [Phone view](progress-phone.png).
 
+[Body-weight chart with invented readings](weight.png).
+
 - Log weight and reps beside the previous session's sets. Resume unfinished entries and follow superset rounds.
 - Filter strength and weekly work by body area. Open the recorded sets behind a chart.
+- View dated weight readings and a seven-day trend when Health is connected.
 - Keep favorites and inspect the reason for a suggested target.
 - Save on the device before syncing. Export the records and restore a verified backup.
 
@@ -53,7 +56,24 @@ For example, the default local setting is `WORKOUT_APP_ORIGIN=http://127.0.0.1:1
 
 Open the app online first so the browser can save its files. Add it to the phone's Home Screen. Clearing browser storage removes unsynced records, drafts, and rest state. Synced records remain on the server.
 
-The optional Health bridge supplies recovery guidance when configured. Logging and Progress work without it. It is not an Apple Health integration. Dated body-weight history is a separate, unfinished extension.
+The optional Health bridge supplies recovery guidance and dated weight readings when configured. Logging and Progress work without it. This is not an Apple Health integration.
+
+### Optional Health weight connection
+
+Health owns the readings; add or edit them there. Workout reads the versioned `/api/integration/v1/body-weight` route and saves the last validated response for offline display. The card shows when that copy was saved and whether it covers the selected dates. A current response with the connection disabled removes the saved copy.
+
+Supply these values through the server environment or a private Compose override:
+
+| Variable | Purpose |
+|---|---|
+| `HEALTH_INTEGRATION_URL` | Base URL reachable from the Workout server. |
+| `HEALTH_WEIGHT_TOKEN` | Separate read-only weight credential, configured on both services. Do not reuse the advisory credential. |
+| `INTEGRATION_SUBJECT_ID` | The same fixed subject on both services. |
+| `HEALTH_APP_URL` | Optional private HTTPS address for the link to Health. |
+
+The generic Compose file leaves this connection off. It does not supply a Health service. Keep credentials outside Git and the browser. The existing `HEALTH_ADVISORY_TOKEN` and `WORKOUT_INTEGRATION_TOKEN` keep their separate purposes.
+
+The chart shows kg and retains each reading's original display unit in its data table. For several readings on one day, the daily point uses the last reading. The trailing seven-day mean needs at least two measured days. It does not create readings for missing days or change historical strength estimates. After deleting a reading in Health, reopen Progress while connected to refresh its saved copy.
 
 ## Check a change
 
@@ -65,7 +85,7 @@ npm run build
 PLAYWRIGHT_PYTHON=.venv/bin/python npm test
 ```
 
-Tests use temporary databases and invented records. Linux browser setup can require `playwright install --with-deps`. The local performance test measures a four-times-slower Chromium CPU and native WebKit. Its full-history performance check remains unresolved on the shared development machine. Shared CI runners are not a physical phone test.
+Tests use temporary databases and invented records. Linux browser setup can require `playwright install --with-deps`. The full-size fabricated workload passed the local performance check: save p95 was 37.4 ms in Chromium at 4× CPU slowdown and 24.0 ms in native WebKit; offline open took 613.0 ms and 221.8 ms. Cold downloads took 22.4 s and 10.2 s. Earlier timings on this shared host varied. This run and shared CI are not physical phone tests.
 
 The GitHub workflow checks builds, domain behavior, logging, and Progress. It does not publish or deploy. Maintain one source: test a change, approve its GitHub release, then deploy that same commit privately.
 

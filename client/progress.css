@@ -65,6 +65,11 @@
 .trend-reading{text-align:right;font-size:var(--text-sub)}
 .mini-trend{display:block;width:64px;height:28px}
 .progress-support{display:flex;flex-direction:column;gap:var(--s3)}
+.body-weight .chart-heading{margin-bottom:var(--s2)}
+.weight-chart{height:230px;width:100%;min-width:0;margin:var(--s2) 0}
+.body-weight .chart-empty-note{min-height:72px;display:flex;align-items:center;color:var(--ink-muted);font-size:var(--text-caption)}
+.health-weight-link{display:inline-flex;align-items:center;min-height:44px;color:var(--accent);font-size:var(--text-caption)}
+.weight-more{min-height:44px;color:var(--accent);font-size:var(--text-caption)}
 .work-reading{font-size:var(--text-sub);color:var(--ink-muted);margin:0}
 .work-reading strong{font-size:var(--text-large);color:var(--ink);letter-spacing:-.03em;font-weight:600;margin-right:var(--s1)}
 .weekly-work .chart-heading{margin-bottom:var(--s3)}

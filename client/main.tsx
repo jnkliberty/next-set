@@ -46,11 +46,14 @@ function App() {
     let mounted=true, interval:any, storage:any;
     openLocal(async (event:any) => {
       if(!mounted)return;
-      if(event.rows)setData((previous:any)=>merge(previous,event.rows));
+      if(event.rows){
+        setData((previous:any)=>merge(previous,event.rows));
+        handle.current?.status().then((state:any)=>{if(mounted)setStatus((previous:any)=>({...previous,...state}));}).catch(()=>{if(mounted)setError('Storage disconnected. Reopen the app before your next set.');});
+      }
       if(event.error)setError(event.error);
       if(event.online!=null)setStatus((previous:any)=>({...previous,online:event.online}));
       if(event.reload)await refresh();
-      else if(handle.current)setStatus((previous:any)=>({...previous,...event}));
+      else if(handle.current&&!event.rows)setStatus((previous:any)=>({...previous,...event}));
     }).then(async store => {
       if(!mounted){store.close();return;} storage=store; handle.current=store;setLocal(store);
       await refresh();setLoaded(true);store.sync(); interval=setInterval(()=>store.sync(),30000);
@@ -106,7 +109,7 @@ function App() {
       !run&&screen!=='progress'?<>{open&&<div className="page-list"><Button primary onClick={()=>startExtra(open.id)}>Resume workout</Button></div>}<ProgramList data={data} choose={chooseProgram} create={()=>setPanel('new-program')} extra={()=>setPanel('extra-workout')}/></>:
       screen==='calendar'?<Calendar data={data} run={run} local={local} refresh={refresh} fail={setError} chooseDay={chooseDay} showSession={showHistory} startExtra={(id:string)=>{setSessionId(id);setDayId(null);navigate('lift');}}/>:
       screen==='program'?<ProgramView data={data} run={run} local={local} refresh={refresh} fail={setError} next={day} chooseDay={chooseDay} editDay={(own:Row)=>setEditor({mode:'program',day:own})} start={()=>start()} startBusy={startBusy} chooseProgram={()=>setPanel('switch-program')}/>:
-      screen==='progress'?<Suspense fallback={<div className="field" role="status">Opening progress…</div>}><Progress data={data} showSession={showHistory}/></Suspense>:<WorkoutView data={data} selected={selected} setEditor={setEditor} start={()=>start()} startBusy={startBusy} setSessionId={setSessionId} navigate={navigate} switchProgram={()=>setPanel('switch-program')} otherDay={()=>setPanel('other-day')} addWorkout={()=>setPanel('extra-workout')}/>}
+      screen==='progress'?<Suspense fallback={<div className="field" role="status">Opening progress…</div>}><Progress data={data} showSession={showHistory} local={local}/></Suspense>:<WorkoutView data={data} selected={selected} setEditor={setEditor} start={()=>start()} startBusy={startBusy} setSessionId={setSessionId} navigate={navigate} switchProgram={()=>setPanel('switch-program')} otherDay={()=>setPanel('other-day')} addWorkout={()=>setPanel('extra-workout')}/>}
     </main>
     <Tabs screen={screen} navigate={navigate}/>
     {panel==='session'&&<SessionSheet data={data} local={local} status={status} session={session} close={()=>setPanel(null)} fail={setError} refresh={refresh} pause={leaveSession} deleted={leaveSession}/>}

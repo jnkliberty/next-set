@@ -13,6 +13,29 @@ const path = process.argv[2];
 const actual = path && (existsSync(path) ? realpathSync(path) : resolve(realpathSync(dirname(path)),basename(path)));
 if (!actual || !actual.startsWith(`${realpathSync(tmpdir())}${sep}`)) throw new Error('Fixture database must be inside the temporary directory');
 const store = new Store(actual);
+if (process.argv.includes('--body-weight')) {
+  process.env.HEALTH_WEIGHT_TOKEN = 'fixture-token'; process.env.HEALTH_INTEGRATION_URL = 'http://health.fixture.invalid';
+  process.env.INTEGRATION_SUBJECT_ID = 'fixture-subject'; process.env.HEALTH_APP_URL = 'https://health.fixture.invalid';
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options) => {
+    const url = new URL(input);
+    if (url.hostname !== 'health.fixture.invalid') return originalFetch(input, options);
+    const from = url.searchParams.get('from'), to = url.searchParams.get('to');
+    const at = (date, hour, minute) => `${date}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00.000Z`;
+    const day = (daysAgo) => { const date = new Date(`${to}T12:00:00Z`); date.setUTCDate(date.getUTCDate() - daysAgo); return date.toISOString().slice(0, 10); };
+    const earlier = day(500), near = day(2), measurements = [
+      { id: '550e8400-e29b-41d4-a716-446655440001', date: earlier, measuredAt: at(earlier, 13, 0), grams: 80000, displayUnit: 'kg', source: 'manual' },
+      ...Array.from({ length: 14 }, (_, index) => {
+        const date = day(56 - index * 4);
+        return { id: `550e8400-e29b-41d4-a716-44665544${String(index + 100).padStart(4, '0')}`, date, measuredAt: at(date, 13, 0), grams: 84500 - index * 200 + [0, 100, -150, 50][index % 4], displayUnit: 'kg', source: 'manual' };
+      }),
+      { id: '550e8400-e29b-41d4-a716-446655440004', date: near, measuredAt: at(near, 13, 0), grams: 81900, displayUnit: 'kg', source: 'manual' },
+      { id: '550e8400-e29b-41d4-a716-446655440002', date: to, measuredAt: at(to, 13, 0), grams: 81000, displayUnit: 'kg', source: 'manual' },
+      { id: '550e8400-e29b-41d4-a716-446655440003', date: to, measuredAt: at(to, 14, 0), grams: 82000, displayUnit: 'kg', source: 'manual' },
+    ].filter(row => row.date >= from && row.date <= to);
+    return new Response(JSON.stringify({ schemaVersion: 1, source: 'health', subjectId: 'fixture-subject', reportingZone: 'America/Chicago', interval: { from, to }, generatedAt: new Date().toISOString(), sourceRevision: 'a'.repeat(64), measurements }), { headers: { 'content-type': 'application/json' } });
+  };
+}
 let faultCode = null;
 if(process.argv.includes('--fault')){
   const result=await build({configFile:false,publicDir:false,logLevel:'silent',build:{write:false,minify:false,lib:{entry:resolve('scripts/fault-entry.js'),formats:['es']}}});

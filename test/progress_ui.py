@@ -128,8 +128,10 @@ def run(engine, base, mode):
     try:
         page.goto(base + '/#progress')
         expect(page.locator('.progress-totals dd').first).to_have_text('0' if mode == 'empty' else '1' if mode == 'sparse' else re.compile(r'[1-9]\d+'))
-        if mode == 'populated':
+        if mode in ['populated', 'weight']:
             page.get_by_role('button', name='Chest', exact=True).click()
+        if mode == 'weight':
+            expect(page.locator('.body-weight .weight-chart')).to_be_visible()
         capture(page, engine.name, mode)
         if mode == 'populated':
             exercise_charts(page)
@@ -137,7 +139,30 @@ def run(engine, base, mode):
             expect(page.get_by_text('One recorded point.', exact=False)).to_be_visible()
             assert page.locator('.strength-chart .recharts-line-dot').count() == 1
         else:
-            expect(page.get_by_text('Your progress starts with a session', exact=True)).to_be_visible()
+            if mode == 'empty':
+                expect(page.get_by_text('Your progress starts with a session', exact=True)).to_be_visible()
+                expect(page.locator('.body-weight')).to_have_count(0)
+            else:
+                card = page.locator('.body-weight')
+                expect(card).to_be_visible()
+                expect(card.get_by_text('Daily readings and a trailing 7-day mean of measured days.', exact=False)).to_be_visible()
+                details = card.locator('details.chart-data')
+                details.locator('summary').click()
+                expect(details.locator('tbody tr')).to_have_count(17)
+                expect(details).to_contain_text('82 kg')
+                expect(details).to_contain_text('Times use America/Chicago.')
+                expect(card.locator('.weight-chart .recharts-line')).to_have_count(2)
+                page.get_by_role('button', name='All', exact=True).click()
+                older_date = page.evaluate('''() => {
+                  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date());
+                  const older=new Date(`${today}T12:00:00Z`);older.setUTCDate(older.getUTCDate()-500);
+                  const parts=new Intl.DateTimeFormat('en-US',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}).formatToParts(older);
+                  const part=type=>parts.find(item=>item.type===type).value;
+                  return `${part('weekday')} ${part('day')} ${part('month')}`;
+                }''')
+                expect(page.locator('.progress-period')).to_contain_text(older_date)
+                expect(details.locator('tbody tr')).to_have_count(18)
+                expect(details).to_contain_text('80 kg')
         page.wait_for_function('navigator.serviceWorker.controller !== null')
         # WebKit's forced offline mode blocks navigation before the worker runs. Stop the fixture server instead.
         page.request.post(base + '/__stop')
@@ -145,8 +170,13 @@ def run(engine, base, mode):
         start = perf_counter()
         page.reload(wait_until='domcontentloaded')
         page.locator('.progress-page').wait_for()
+        if mode == 'weight':
+            expect(page.locator('.body-weight')).to_contain_text('Health is unavailable; showing saved readings.')
         elapsed = (perf_counter() - start) * 1000
         assert elapsed < 1000, elapsed
+        if mode == 'weight':
+            page.locator('.body-weight details summary').click()
+            expect(page.locator('.body-weight details tbody tr')).to_have_count(17)
         context.set_offline(True)
         page.get_by_role('button', name='4 weeks', exact=True).click()
         expect(page.get_by_role('button', name='4 weeks', exact=True)).to_have_attribute('aria-pressed', 'true')
