@@ -104,6 +104,21 @@ export function skipRemainingChanges(data, session, slot, now = Date.now()) {
   return changes;
 }
 
+export function removeExerciseChanges(data, session, slot, now = Date.now()) {
+  if (session.status !== 'open' || slot.session_id !== session.id || !live(data.session_slot).some(row => row.id === slot.id)) throw new Error('This exercise is not in an open workout.');
+  const sets = live(data.set).filter(row => row.session_slot_id === slot.id);
+  const changes = [{ table: 'session_slot', row: { id: slot.id, deleted_at: now } },
+    ...sets.map(row => ({ table: 'set', row: { id: row.id, deleted_at: now } })), ...removeTargetReasons(data, sets, now),
+    ...(live(data.setting).some(row => row.id === `return:${slot.id}`) ? [{ table: 'setting', row: { id: `return:${slot.id}`, deleted_at: now } }] : [])];
+  const remainingSlots = live(data.session_slot).filter(row => row.session_id === session.id && row.id !== slot.id), remainingIds = new Set(remainingSlots.map(row => row.id));
+  if (!live(data.set).some(row => remainingIds.has(row.session_slot_id) && row.done_at == null)) {
+    const after = { ...data, session_slot: [...data.session_slot.filter(row => row.id !== slot.id), { ...slot, deleted_at: now }],
+      set: [...data.set.filter(row => !sets.some(removed => removed.id === row.id)), ...sets.map(row => ({ ...row, deleted_at: now }))] };
+    changes.push(...finishChanges(after, session, now));
+  }
+  return changes;
+}
+
 export function deleteSessionChanges(data, session, now = Date.now()) {
   const slots = live(data.session_slot).filter(row => row.session_id === session.id), ids = new Set(slots.map(row => row.id));
   const events = live(data.run_event).filter(row => row.session_id === session.id);

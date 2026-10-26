@@ -33,7 +33,7 @@ export function Download({ data, name, children }: { data: any; name: string; ch
 }
 
 // Save, then offer Undo for 10 seconds. Undo writes back the old values; db.js refuses it if anything changed since.
-type Offer = { text: string; rows: any[]; guard: any; local: any };
+type Offer = { text: string; rows: any[]; guard: any; local: any; afterUndo?: () => Promise<void> };
 let undo: { offer: Offer | null; sheets: number } = { offer: null, sheets: 0 }, timer: any, handlers: any = {};
 const listeners = new Set<() => void>();
 const setUndo = (next: Partial<typeof undo>) => { undo = { ...undo, ...next }; listeners.forEach(listener => listener()); };
@@ -41,14 +41,14 @@ const subscribe = (listener: () => void) => { listeners.add(listener); return ()
 export const undoPending = () => undo.offer != null;
 export const setUndoHandlers = (next: { refresh: () => any; fail: (text: string) => void }) => { handlers = next; };
 
-export async function saveUndoable(local: any, changes: any[], text: string) {
-  const { undo: rows, guard } = await local.save(changes);
-  clearTimeout(timer); setUndo({ offer: { text, rows, guard, local } }); timer = setTimeout(() => setUndo({ offer: null }), 10000);
+export async function saveUndoable(local: any, changes: any[], text: string, expected = {}, afterUndo?: () => Promise<void>) {
+  const { undo: rows, guard } = await local.save(changes, null, expected);
+  clearTimeout(timer); setUndo({ offer: { text, rows, guard, local, afterUndo } }); timer = setTimeout(() => setUndo({ offer: null }), 10000);
 }
 
 async function runUndo() {
   const offer = undo.offer!; clearTimeout(timer); setUndo({ offer: null });
-  try { await offer.local.save(offer.rows, offer.guard); await handlers.refresh?.(); offer.local.sync(); }
+  try { await offer.local.save(offer.rows, offer.guard); await offer.afterUndo?.(); await handlers.refresh?.(); offer.local.sync(); }
   catch (error: any) { handlers.fail?.(error?.stale ? error.message : 'Undo did not save.'); }
 }
 

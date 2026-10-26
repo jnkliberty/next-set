@@ -43,7 +43,7 @@ export function useDrafts(local: any, sessionId: string, fail: (message: string)
   }
   const unit = (slot: Row) => records[`unit:${slot.id}`]?.unit;
   const conflict = (set: Row) => set.done_at == null && records[set.id] && records[set.id].base !== draftBase(set);
-  const resolve = (set: Row, keep: boolean) => (keep ? update(set, records[set.id].values, records[set.id].unit, true) : write(set.id, null)).catch(error);
+  const resolve = (set: Row) => update(set, records[set.id].values, records[set.id].unit, true).catch(error);
   function switchUnit(slot: Row, sets: Row[], to: string, convert: (weight: string, from: string) => string) {
     const next = { ...current.current }, updates: any[] = [[['draft', sessionId, `unit:${slot.id}`], { unit: to }]];
     next[`unit:${slot.id}`] = { unit: to };
@@ -54,8 +54,12 @@ export function useDrafts(local: any, sessionId: string, fail: (message: string)
     }
     current.current = next; setRecords(next); local.drafts.writeMany(updates).catch(error);
   }
+  function restore(saved: Row) {
+    const next = { ...current.current, ...saved }; current.current = next; setRecords(next);
+    return local.drafts.writeMany(Object.entries(saved).map(([id, value]) => [['draft', sessionId, id], value]));
+  }
   return { records, ready, edit, update, unit, conflict, resolve, error,
-    switchUnit,
+    switchUnit, restore,
     forget: (set: Row) => { const next = { ...current.current }; delete next[set.id]; current.current = next; setRecords(next); },
   };
 }

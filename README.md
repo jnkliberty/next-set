@@ -11,6 +11,7 @@ A private workout tracker for logging sets and seeing progress. React on the pho
 [Body-weight chart with invented readings](weight.png).
 
 - Log weight and reps beside the previous session's sets. Resume unfinished entries and follow superset rounds.
+- Enter each weight in a blank field, or resume a saved draft. Swipe an exercise to reveal Remove, with Undo.
 - Filter strength and weekly work by body area. Open the recorded sets behind a chart.
 - View dated weight readings and a seven-day trend when Health is connected.
 - Keep favorites and inspect the reason for a suggested target.

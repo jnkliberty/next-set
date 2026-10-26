@@ -257,6 +257,7 @@ def health_context_journey(browser, engine, url):
         receipt_ids = [row['id'] for row in live_rows(page, 'event') if row.get('detail', {}).get('integration', {}).get('recordType') == 'health_advisory']
         assert len(receipt_ids) == 1
         receipt_id = receipt_ids[0]
+        page.get_by_label('Set 1 weight in kg').first.fill('50')
         page.get_by_role('button', name='Log set 1', exact=True).first.click()
         page.wait_for_function('''()=>{const r=indexedDB.open('workout-tracker');return new Promise(resolve=>r.onsuccess=()=>{const db=r.result;const q=db.transaction('set').objectStore('set').getAll();q.onsuccess=()=>{db.close();resolve(q.result.some(row=>row.done_at!=null))}})}''')
         assert len(requests) == 1, f'{engine}: a set save must not fetch guidance again'

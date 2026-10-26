@@ -7,6 +7,7 @@ import { projectCalendar } from '../domain/calendar.js';
 import { integrationRecord } from '../domain/integration-record.js';
 import { targetReason } from '../domain/targets.js';
 import { inverse } from '../domain/undo.js';
+import { live } from '../domain/model.js';
 
 function fixture() {
   return { exercise:[{id:'e',name:'Example Press',equipment:'barbell'}],
@@ -112,6 +113,34 @@ test('skip removes only pending sets and finishes when no other sets remain', ()
   data.session_slot.push({ id: 'other', session_id: 'now' });
   data.set.push({ id: 'other-set', session_slot_id: 'other', done_at: null });
   assert.equal(sessions.skipRemainingChanges(data, session, data.session_slot[1], 400000).some(change => change.table === 'session'), false);
+});
+
+test('removing an exercise soft-deletes its whole current slot and safely completes the final workout', () => {
+  const data = resultsFixture(), session = data.session[1], slot = data.session_slot[1];
+  data.setting.push({ id: 'target-reason:logged', value: {} }, { id: 'return:now-slot', value: {} });
+  data.set.push({ id: 'reason-set', session_slot_id: 'now-slot', done_at: 2 });
+  const changes = sessions.removeExerciseChanges(data, session, slot, 400000);
+  assert.deepEqual(changes.filter(change => change.table === 'set').map(change => change.row), [
+    { id: 'logged', deleted_at: 400000 }, { id: 'pending', deleted_at: 400000 }, { id: 'reason-set', deleted_at: 400000 },
+  ]);
+  assert.ok(changes.some(change => change.table === 'session_slot' && change.row.id === slot.id && change.row.deleted_at === 400000));
+  assert.ok(changes.some(change => change.table === 'setting' && change.row.id === 'target-reason:logged' && change.row.deleted_at === 400000));
+  assert.ok(changes.some(change => change.table === 'setting' && change.row.id === 'return:now-slot' && change.row.deleted_at === 400000));
+  assert.equal(changes.find(change => change.table === 'session').row.status, 'done');
+  const removed = withChanges(data, changes), restored = withChanges(removed, inverse((table, id) => data[table]?.find(row => row.id === id), changes));
+  assert.equal(restored.session_slot.find(row => row.id === slot.id).deleted_at, null);
+  assert.equal(restored.set.find(row => row.id === 'logged').deleted_at, null);
+  assert.equal(restored.session.find(row => row.id === session.id).status, 'open');
+  assert.equal(live(removed.set).some(row => row.session_slot_id === slot.id), false);
+});
+
+test('removing the last pending exercise finishes even when another exercise is already logged', () => {
+  const data = resultsFixture(), session = data.session[1], slot = data.session_slot[1];
+  data.session_slot.push({ id: 'done-slot', session_id: session.id });
+  data.set.push({ id: 'done-set', session_slot_id: 'done-slot', done_at: 3 });
+  const changes = sessions.removeExerciseChanges(data, session, slot, 400000);
+  assert.equal(changes.find(change => change.table === 'session').row.status, 'done');
+  assert.equal(changes.find(change => change.table === 'run_event' && change.row.id === `done:${session.id}`).row.position, 1);
 });
 
 test('finish skips omitted workout positions but an extra workout never advances its run', () => {

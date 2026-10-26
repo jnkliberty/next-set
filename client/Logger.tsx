@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { carryForward, LB_TO_KG, weightIn, targetReason, targetReasonChange, targetReasons } from '../domain/targets.js';
 import { byId, live, trainingRows } from '../domain/model.js';
-import { carryForwardReasonChanges, finishChanges, returnTargetChanges, skipRemainingChanges, startChanges } from '../domain/session.js';
+import { carryForwardReasonChanges, finishChanges, removeExerciseChanges, returnTargetChanges, skipRemainingChanges, startChanges } from '../domain/session.js';
 import { compareSet } from '../domain/metrics.js';
 import { HealthContext } from './HealthContext';
 import { Button, Row, dateText, numberText, rangeText, saveUndoable, Sheet } from './ui';
@@ -54,7 +54,7 @@ export function Logger({ data, local, session, back, changed, fail, openSession,
   const drafts = useDrafts(local, session.id, fail, data.set), [closeReason, setCloseReason] = useState('');
   const [availableAdvisory, setAvailableAdvisory] = useState<Row | null>(null), [linkAdvisory, setLinkAdvisory] = useState(false);
   const rest = useRest(local, session.id, flow.rest, fail), restSeconds = rest.seconds, showRest = rest.active;
-  const [large, setLarge] = useState<string | null>(null), [notes, setNotes] = useState<string | null>(null), [busy, setBusy] = useState(false);
+  const [large, setLarge] = useState<string | null>(null), [notes, setNotes] = useState<string | null>(null), [removeSlot, setRemoveSlot] = useState<any>(null), [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<any>(null), [howTo, setHowTo] = useState<string | null>(null), [seeSets, setSeeSets] = useState(false);
   useEffect(() => { setSeeSets(false); }, [session.status]);
   const advisoryChanged = useCallback((advisory: Row | null) => { setAvailableAdvisory(advisory); setLinkAdvisory(false); }, [session.id]);
@@ -83,7 +83,7 @@ export function Logger({ data, local, session, back, changed, fail, openSession,
   function shownValues(set: Row, slot: Row) {
     const unit = unitOf(slot);
     if (set.done_at != null) return { weight: text(convert(set.weight, set.unit ?? 'kg', unit)), reps: text(set.reps), seconds: text(set.seconds) };
-    return { ...suggestion(set, slot), ...drafts.records[set.id]?.values };
+    return { ...suggestion(set, slot), weight: '', ...drafts.records[set.id]?.values };
   }
   const edit = (set: Row, field: string, value: string) => drafts.edit(set, field, value, unitOf(slots.find((slot: Row) => slot.id === set.session_slot_id)));
   function switchUnit(slot: Row) {
@@ -208,14 +208,31 @@ export function Logger({ data, local, session, back, changed, fail, openSession,
       setNotes(null); local.sync(); changed();
     } catch { fail('The remaining sets did not skip. Try again.'); }
   });
+  const removeExercise = (slotId: string, confirmed?: number) => guarded(async () => {
+    try {
+      const current = await local.snapshot(), currentSession = live(current.session).find((row: Row) => row.id === session.id), currentSlot = live(current.session_slot).find((row: Row) => row.id === slotId);
+      if (!currentSession || !currentSlot || currentSession.status !== 'open') throw new Error('This exercise changed. Reopen the workout and try again.');
+      const sets = live(current.set).filter((set: Row) => set.session_slot_id === currentSlot.id), logged = sets.filter((set: Row) => set.done_at != null).length;
+      if (logged && confirmed == null) { setRemoveSlot({ id: currentSlot.id, name: currentSlot.name, logged }); return; }
+      if (confirmed != null && logged !== confirmed) { setRemoveSlot({ id: currentSlot.id, name: currentSlot.name, logged }); return; }
+      await local.drafts.flush();
+      const keys = new Set([...sets.map((set: Row) => set.id), `unit:${currentSlot.id}`]), saved = await local.drafts.load(session.id);
+      const restore = Object.entries(saved).filter(([id]) => keys.has(id));
+      const expected = Object.fromEntries(sets.map((set: Row) => [`set:${set.id}`, draftBase(set)]));
+      await saveUndoable(local, removeExerciseChanges(current, currentSession, currentSlot), 'Exercise removed', expected,
+        restore.length ? () => drafts.restore(Object.fromEntries(restore)) : undefined);
+      setRemoveSlot(null); local.sync(); changed();
+    } catch (error: any) { fail(error.message || 'The exercise did not remove.'); changed(); }
+  });
   const menuSlot = slots.find((slot: Row) => slot.id === notes);
   const historySheet = history && <ExerciseHistory data={data} exerciseId={history.id} initialRange={history.range} close={() => setHistory(null)}/>;
   if (session.status !== 'open' && !seeSets) return <><WorkoutComplete {...{ data, session, local, changed, fail, back, openSession }} lastSetRating={rate && <Rating last={last} rating={rating}/>} seeSets={() => setSeeSets(true)} history={(id: string, range: any) => setHistory({ id, range })}/>{historySheet}</>;
 
   return <section className="logger" onClickCapture={count}>
     <LoggerHeader {...{ back, day, index, openSession, waiting, remaining, doneCount, allSets }}/>
-    {slots.map((slot: Row) => <ExerciseCard key={slot.id} {...{ slot, index, session, group: groupLabel(slot), addSet, sets: setsOf(slot), unit: unitOf(slot), shownValues, edit, switchUnit, log, toggle, busy: busy || !drafts.ready, large, setLarge, menu: () => setNotes(slot.id), local, fail, pending: pendingReturn(slot), chooseReturn, next, drafts }}/>)}
-    {menuSlot && <ExerciseMenu {...{ slot: menuSlot, exercise: index.exercise.get(menuSlot.exercise_id), index, session, busy, local, fail, changed, onSwap, skip, addSet, setHowTo, setHistory }} sets={setsOf(menuSlot)} close={() => setNotes(null)}/>}
+    {slots.map((slot: Row) => <ExerciseCard key={slot.id} {...{ slot, index, session, group: groupLabel(slot), addSet, sets: setsOf(slot), unit: unitOf(slot), shownValues, edit, switchUnit, log, toggle, busy: busy || !drafts.ready, large, setLarge, menu: () => setNotes(slot.id), remove: () => removeExercise(slot.id), removable: session.status === 'open', local, fail, pending: pendingReturn(slot), chooseReturn, next, drafts }}/>)}
+    {menuSlot && <ExerciseMenu {...{ slot: menuSlot, exercise: index.exercise.get(menuSlot.exercise_id), index, session, busy, local, fail, changed, onSwap, skip, addSet, remove: (slot: Row) => { setNotes(null); removeExercise(slot.id); }, setHowTo, setHistory }} sets={setsOf(menuSlot)} close={() => setNotes(null)}/>}
+    {removeSlot && <Sheet title="Remove exercise?" close={() => setRemoveSlot(null)}><p>Remove {removeSlot.name} and its {removeSlot.logged} logged {removeSlot.logged === 1 ? 'set' : 'sets'} from this workout?</p><div className="sheet-cta"><Button onClick={() => setRemoveSlot(null)}>Keep exercise</Button><Button primary disabled={busy} onClick={() => removeExercise(removeSlot.id, removeSlot.logged)}>Remove exercise</Button></div></Sheet>}
     {historySheet}
     {howTo && <Sheet title={`How to · ${index.exercise.get(howTo)?.name ?? 'Exercise'}`} close={() => setHowTo(null)}><p style={{ whiteSpace: 'pre-wrap' }}>{index.exercise.get(howTo)?.instructions || 'No instructions saved for this exercise.'}</p></Sheet>}
     {showRest && <div className="rest-bar" role="region" aria-label="Rest">
@@ -243,11 +260,25 @@ function describe(first: Row | undefined, index: any, session: Row) {
   return { range, subtitle: `${range} reps`, reason: null };
 }
 
-function ExerciseCard({ slot, index, session, group, addSet, sets, unit, shownValues, edit, switchUnit, log, toggle, busy, large, setLarge, menu, local, fail, pending, chooseReturn, next, drafts }: any) {
+function ExerciseCard({ slot, index, session, group, addSet, sets, unit, shownValues, edit, switchUnit, log, toggle, busy, large, setLarge, menu, remove, removable, local, fail, pending, chooseReturn, next, drafts }: any) {
   const exercise = index.exercise.get(slot.exercise_id), first = sets.find((set: Row) => set.done_at == null) ?? sets[0];
   const { range, subtitle, reason } = describe(first, index, session);
   const timed = sets.some((set: Row) => set.type === 'timed'), complete = sets.every((set: Row) => set.done_at != null);
-  return <article className={`card exercise${complete ? ' complete' : ''}${next?.session_slot_id === slot.id ? ' current' : ''}`} aria-label={slot.name}>
+  const [revealed, setRevealed] = useState(''), gesture = useRef<any>(null);
+  return <div className={`exercise-swipe${revealed ? ` reveal-${revealed}` : ''}`} onPointerDown={event => {
+    if (!removable || !event.isPrimary || (event.target as HTMLElement).closest('button,input,textarea,select,[contenteditable=true]')) return;
+    gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY }; event.currentTarget.setPointerCapture(event.pointerId);
+  }} onPointerUp={event => {
+    const start = gesture.current; gesture.current = null;
+    if (!start || start.id !== event.pointerId) return;
+    const dx = event.clientX - start.x, dy = event.clientY - start.y;
+    if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy)) {
+      const direction = dx > 0 ? 'left' : 'right';
+      setRevealed(current => current && current !== direction ? '' : direction);
+    } else if (Math.abs(dx) < 8 && Math.abs(dy) < 8) setRevealed('');
+  }} onPointerCancel={() => { gesture.current = null; setRevealed(''); }}>
+    {revealed && removable && <button className={`exercise-remove ${revealed}`} onClick={remove} disabled={busy}>Remove</button>}
+    <article className={`card exercise${complete ? ' complete' : ''}${next?.session_slot_id === slot.id ? ' current' : ''}`} aria-label={slot.name}>
     <header className="exercise-head"><div>{group && <p className="eyebrow group">{group}</p>}<h2>{slot.name ?? exercise?.name}</h2><p className="muted subtitle">{subtitle}</p></div><button className="icon-button" aria-haspopup="dialog" aria-label={`Exercise menu for ${slot.name}`} onClick={menu}>⋯</button></header>
     {pending && <div className="return"><p><strong>Back after {pending.days} days.</strong> Choose your starting weight.</p><div className="return-choices">{[0, 0.05, 0.1].map(reduction => <button key={reduction} className="pill" disabled={busy} onClick={() => chooseReturn(slot, reduction)}>{reduction === 0 ? 'Same' : `${reduction * 100}% lighter`}{pending.recommended === reduction ? ' ✓' : ''}</button>)}</div></div>}
     <div className={`set-table${timed ? ' timed' : ''}`} role="table" aria-label={`${slot.name} sets`}>
@@ -255,12 +286,14 @@ function ExerciseCard({ slot, index, session, group, addSet, sets, unit, shownVa
       {sets.map((set: Row) => <SetRow key={set.id} {...{ set, slot, sets, index, unit, timed, shownValues, edit, log, toggle, busy, large, setLarge, pending, drafts, next }}/>)}
     </div>
     <button className="add-set" disabled={busy} onClick={() => addSet(slot)}>+ Add set</button>
-  </article>;
+    </article>
+  </div>;
 }
 
 function SetRow({ set, slot, sets, index, unit, timed, shownValues, edit, log, toggle, busy, large, setLarge, pending, drafts, next }: any) {
   const values = shownValues(set, slot), done = set.done_at != null, label = setLabel(set, sets), ref = index.set.get(set.reference_set_id);
   const conflict = drafts.conflict(set);
+  const useSaved = () => drafts.update(set, { weight: text(convert(set.weight, set.unit ?? 'kg', unit)), reps: text(set.reps), seconds: text(set.seconds) }, unit, true).catch(drafts.error);
         const lastText = ref ? set.type === 'timed' ? `${ref.seconds ?? ''} s` : `${numberText(weightIn(ref, unit))} × ${ref.reps}` : '';
         const field = (name: string, mode: 'decimal' | 'numeric', aria: string) => <input id={`${name}-${set.id}`} className="cell-input" inputMode={mode} enterKeyHint="done" autoComplete="off" aria-label={`Set ${label} ${aria}`} placeholder={name === 'weight' ? unit : ''} value={values[name]} readOnly={done} disabled={busy || !!conflict} onFocus={event => event.target.select()} onChange={event => edit(set, name, event.target.value)}/>;
         return <>
@@ -270,7 +303,7 @@ function SetRow({ set, slot, sets, index, unit, timed, shownValues, edit, log, t
             {set.type === 'timed' ? <span role="cell" className="wide">{field('seconds', 'numeric', 'seconds')}</span> : timed ? <span role="cell" className="wide">{field('reps', 'numeric', 'reps')}</span> : <><span role="cell">{field('weight', 'decimal', `weight in ${unit}`)}</span><span role="cell">{field('reps', 'numeric', 'reps')}</span></>}
             <span role="cell"><button className="check" aria-pressed={done} aria-label={done ? `Undo set ${label}` : `Log set ${label}`} disabled={busy || !!conflict || (!!pending && !done)} onClick={() => toggle(set, slot)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button></span>
           </div>
-          {conflict && <div className="large" role="alert"><p>Set {label} changed elsewhere. Your draft is shown above.</p><div><button className="pill" onClick={() => drafts.resolve(set, false)}>Use saved values</button><button className="pill strong" onClick={() => drafts.resolve(set, true)}>Keep my draft</button></div></div>}
+          {conflict && <div className="large" role="alert"><p>Set {label} changed elsewhere. Your draft is shown above.</p><div><button className="pill" onClick={useSaved}>Use saved values</button><button className="pill strong" onClick={() => drafts.resolve(set)}>Keep my draft</button></div></div>}
           {large === set.id && <div className="large" role="status"><p>{values.weight} {unit} is much higher than your recorded weights.</p><div><button className="pill" onClick={() => { setLarge(null); document.getElementById(`weight-${set.id}`)?.focus(); }}>Change</button><button className="pill strong" onClick={() => log(set, slot, true)}>Log anyway</button></div></div>}
         </>;
 }
@@ -281,7 +314,7 @@ function LoggerHeader({ back, day, index, openSession, waiting, remaining, doneC
 </>;
 }
 
-function ExerciseMenu({ slot, exercise, sets, index, session, busy, local, fail, changed, onSwap, skip, addSet, setHowTo, setHistory, close }: any) {
+function ExerciseMenu({ slot, exercise, sets, index, session, busy, local, fail, changed, onSwap, skip, addSet, remove, setHowTo, setHistory, close }: any) {
   const first = sets.find((set: Row) => set.done_at == null) ?? sets[0];
   const { reason } = describe(first, index, session);
   const saved = targetReason(first, index.setting.get(`target-reason:${first?.id}`), index.set);
@@ -290,6 +323,7 @@ function ExerciseMenu({ slot, exercise, sets, index, session, busy, local, fail,
   return <Sheet title={slot.name} close={close}><div className="exercise-menu">
     {onSwap && <button disabled={busy} onClick={() => { close(); onSwap(slot); }}>Swap for today</button>}
     <button disabled={busy || session.status !== 'open' || !sets.some((set: Row) => set.done_at == null)} onClick={() => skip(slot)}>Skip remaining sets</button>
+    <button disabled={busy || session.status !== 'open'} onClick={() => { close(); remove(slot); }}>Remove exercise</button>
     <button disabled={busy} onClick={() => { addSet(slot); close(); }}>Add a set</button>
     <button onClick={() => { setHowTo(slot.exercise_id); close(); }}>How to</button>
     <button onClick={() => { setHistory({ id: slot.exercise_id, range: null }); close(); }}>History</button>

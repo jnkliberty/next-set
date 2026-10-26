@@ -14,6 +14,7 @@ with sync_playwright() as p:
         page.on('pageerror',lambda error:errors.append(str(error)))
         try:
             if engine.name=='chromium':context.new_cdp_session(page).send('Emulation.setCPUThrottlingRate',{'rate':4})
+            assert page.request.post(sys.argv[1]+'/__reset').ok
             pages=[]
             page.on('response',lambda response: pages.append(response) if '/api/changes?' in response.url else None)
             start=perf_counter();page.goto(sys.argv[1])

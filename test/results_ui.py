@@ -97,6 +97,7 @@ def verify_historical_extra(page, folder, engine, session_id):
     page.get_by_role('dialog').get_by_role('button', name='Add workout', exact=True).click()
     page.get_by_role('dialog').locator('.card.list .list-row').first.click()
     page.get_by_role('dialog').get_by_role('button', name='Add workout', exact=True).click()
+    page.get_by_role('article', name='Bench Press').get_by_role('textbox', name='Set 1 weight in kg', exact=True).fill('50')
     page.get_by_role('article', name='Bench Press').get_by_role('button', name='Log set 1', exact=True).click()
     extra = next(row for row in live_current(page,'session') if row.get('program_day_id') is None)
     page.get_by_role('button', name='Finish workout', exact=True).click()
@@ -151,6 +152,7 @@ def run(engine, url, folder):
         page.get_by_role('button', name=re.compile('Sample Strength')).click()
         page.get_by_role('button', name=re.compile(r'^Start Day \d+$')).click()
         bench = page.get_by_role('article', name='Bench Press')
+        bench.get_by_role('textbox', name='Set 1 weight in kg', exact=True).fill('50')
         bench.get_by_role('button', name='Log set 1', exact=True).click()
         expect(bench.get_by_role('button', name='Undo set 1', exact=True)).to_be_visible()
         session_id = live_current(page, 'session')[0]['id']
