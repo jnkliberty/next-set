@@ -97,10 +97,13 @@ def verify_historical_extra(page, folder, engine, session_id):
     page.get_by_role('dialog').get_by_role('button', name='Add workout', exact=True).click()
     page.get_by_role('dialog').locator('.card.list .list-row').first.click()
     page.get_by_role('dialog').get_by_role('button', name='Add workout', exact=True).click()
+    page.get_by_role('button', name='Expand Bench Press', exact=True).click()
     page.get_by_role('article', name='Bench Press').get_by_role('textbox', name='Set 1 weight in kg', exact=True).fill('50')
+    page.get_by_role('article', name='Bench Press').get_by_label('Set 1 reps', exact=True).fill('6')
     page.get_by_role('article', name='Bench Press').get_by_role('button', name='Log set 1', exact=True).click()
     extra = next(row for row in live_current(page,'session') if row.get('program_day_id') is None)
     page.get_by_role('button', name='Finish workout', exact=True).click()
+    page.get_by_role('dialog', name='Finish workout?', exact=True).get_by_role('button', name='Finish workout', exact=True).click()
     expect(page.get_by_role('heading', name='Finished early', exact=True)).to_be_visible()
     page.get_by_role('button', name='Done', exact=True).click()
     page.get_by_role('navigation', name='Main').get_by_role('button', name='Calendar', exact=True).click()
@@ -123,9 +126,11 @@ def verify_paused_reopen(page):
     page.get_by_role('navigation', name='Main').get_by_role('button', name='Home', exact=True).click()
     page.get_by_role('button', name='Resume workout', exact=True).click()
     page.get_by_role('button', name='Finish workout', exact=True).click()
+    page.get_by_role('dialog', name='Finish workout?', exact=True).get_by_role('button', name='Finish workout', exact=True).click()
     expect(page.get_by_role('heading', name='Finished early', exact=True)).to_be_visible()
     assert rows(page, 'run')[0]['status'] == 'paused'
     page.get_by_role('button', name='See sets', exact=True).click()
+    page.get_by_role('button', name='Expand Bench Press', exact=True).click()
     page.get_by_role('article', name='Bench Press').get_by_role('button', name='Undo set 1', exact=True).click()
     expect(page.get_by_role('article', name='Bench Press').get_by_role('button', name='Log set 1', exact=True)).to_be_visible()
     assert rows(page, 'run')[0]['status'] == 'paused'
@@ -138,6 +143,7 @@ def verify_paused_reopen(page):
     page.get_by_role('button', name='Return from leave', exact=True).click()
     page.get_by_role('navigation', name='Main').get_by_role('button', name='Home', exact=True).click()
     page.get_by_role('button', name='Resume workout', exact=True).click()
+    page.get_by_role('button', name='Expand Bench Press', exact=True).click()
 
 
 def run(engine, url, folder):
@@ -152,7 +158,9 @@ def run(engine, url, folder):
         page.get_by_role('button', name=re.compile('Sample Strength')).click()
         page.get_by_role('button', name=re.compile(r'^Start Day \d+$')).click()
         bench = page.get_by_role('article', name='Bench Press')
+        bench.get_by_role('button', name='Expand Bench Press', exact=True).click()
         bench.get_by_role('textbox', name='Set 1 weight in kg', exact=True).fill('50')
+        bench.get_by_label('Set 1 reps', exact=True).fill('6')
         bench.get_by_role('button', name='Log set 1', exact=True).click()
         expect(bench.get_by_role('button', name='Undo set 1', exact=True)).to_be_visible()
         session_id = live_current(page, 'session')[0]['id']
@@ -190,6 +198,7 @@ def run(engine, url, folder):
         expect(page.get_by_role('article', name='Bench Press')).to_be_visible()
         assert next(row for row in rows(page,'session') if row['id']==session_id)['status']=='open'
         page.get_by_role('button', name='Finish workout', exact=True).click()
+        page.get_by_role('dialog', name='Finish workout?', exact=True).get_by_role('button', name='Finish workout', exact=True).click()
         expect(page.get_by_role('heading', name='Finished early', exact=True)).to_be_visible()
         expect(page.get_by_role('group', name='Session effort')).to_be_visible()
         assert next(row for row in rows(page,'session') if row['id']==session_id)['effort'] is None

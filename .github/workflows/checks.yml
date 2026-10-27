@@ -21,4 +21,4 @@ jobs:
       - run: pip install -r requirements-test.txt
       - run: python -m playwright install --with-deps chromium webkit
       - run: npm run build
-      - run: node --test --test-concurrency=1 test/progress.test.js test/body-weight.test.js test/metrics.test.js test/api.test.js test/api.body-weight.test.js test/integration.test.js test/session.test.js test/sync.test.js test/export.test.js test/progress-ui.test.js test/app.test.js
+      - run: node --test --test-concurrency=1 test/progress.test.js test/body-weight.test.js test/metrics.test.js test/api.test.js test/api.body-weight.test.js test/integration.test.js test/session.test.js test/sync.test.js test/export.test.js test/progress-ui.test.js test/app.test.js test/compact-workout.test.js test/journeys.test.js test/results.test.js

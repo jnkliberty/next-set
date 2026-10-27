@@ -179,6 +179,7 @@ def choice_journey(browser, engine, url):
         page.get_by_role('button',name=re.compile('Day 2')).click()
         page.get_by_label('Keep this as an extra workout').check()
         page.get_by_role('button',name='Start extra workout',exact=True).click()
+        page.get_by_role('button',name=re.compile('^Expand ')).first.click()
         expect(page.get_by_role('button',name=re.compile('^Log set')).first).to_be_visible()
         extra = next(r for r in live_rows(page,'session') if r.get('program_day_id') is None and r.get('status')=='open')
         assert snapshot(page,['program','program_day','slot','slot_set','run','run_setting'])=={k:v for k,v in before.items() if k!='run_event'}
@@ -257,7 +258,9 @@ def health_context_journey(browser, engine, url):
         receipt_ids = [row['id'] for row in live_rows(page, 'event') if row.get('detail', {}).get('integration', {}).get('recordType') == 'health_advisory']
         assert len(receipt_ids) == 1
         receipt_id = receipt_ids[0]
+        page.get_by_role('button',name='Expand Bench Press',exact=True).click()
         page.get_by_label('Set 1 weight in kg').first.fill('50')
+        page.get_by_label('Set 1 reps',exact=True).first.fill('6')
         page.get_by_role('button', name='Log set 1', exact=True).first.click()
         page.wait_for_function('''()=>{const r=indexedDB.open('workout-tracker');return new Promise(resolve=>r.onsuccess=()=>{const db=r.result;const q=db.transaction('set').objectStore('set').getAll();q.onsuccess=()=>{db.close();resolve(q.result.some(row=>row.done_at!=null))}})}''')
         assert len(requests) == 1, f'{engine}: a set save must not fetch guidance again'
@@ -265,10 +268,11 @@ def health_context_journey(browser, engine, url):
         expect(page.get_by_text('Fixture guidance.', exact=True)).to_be_visible()
         assert len(requests) == 2, f'{engine}: explicit refresh must fetch guidance'
         assert len([row for row in live_rows(page, 'event') if row.get('id') == receipt_id]) == 1
+        page.get_by_role('button', name='Finish workout', exact=True).click()
         checkbox = page.get_by_label('I’m following this guidance', exact=True)
         assert not checkbox.is_checked(), f'{engine}: a receipt must not select guidance for the user'
         page.get_by_label('Why are you stopping?').select_option('time')
-        page.get_by_role('button', name='Finish workout', exact=True).click()
+        page.get_by_role('dialog', name='Finish workout?', exact=True).get_by_role('button', name='Finish workout', exact=True).click()
         choice = next(row for row in live_rows(page, 'event') if row.get('detail', {}).get('integration', {}).get('recordType') == 'session_choice')
         assert choice['detail']['integration']['advisoryId'] is None, 'an old receipt must not link without an explicit selection'
         print(f'PASS {engine}: set save does not refetch; refresh fetches; receipt is not auto-selected')
@@ -281,9 +285,10 @@ def health_context_journey(browser, engine, url):
         page.route('**/api/health-context', lambda route: guidance(route))
         page.get_by_role('button', name='Start Day 1', exact=True).click()
         expect(page.get_by_text('Fixture guidance.', exact=True)).to_be_visible()
+        page.get_by_role('button', name='Finish workout', exact=True).click()
         page.get_by_label('I’m following this guidance', exact=True).check()
         page.get_by_label('Why are you stopping?').select_option('recovery')
-        page.get_by_role('button', name='Finish workout', exact=True).click()
+        page.get_by_role('dialog', name='Finish workout?', exact=True).get_by_role('button', name='Finish workout', exact=True).click()
         choice = next(row for row in live_rows(page, 'event') if row.get('detail', {}).get('integration', {}).get('recordType') == 'session_choice')
         assert choice['detail']['integration']['advisoryId'] == 'fixture-advice', 'explicit current guidance selection must link its advisory ID'
         print(f'PASS {engine}: explicit guidance selection links the displayed advisory')
@@ -300,13 +305,16 @@ def health_context_journey(browser, engine, url):
         page.route('**/api/health-context', valid_then_error)
         page.get_by_role('button', name='Start Day 1', exact=True).click()
         expect(page.get_by_text('Fixture guidance.', exact=True)).to_be_visible()
+        page.get_by_role('button', name='Finish workout', exact=True).click()
         page.get_by_label('I’m following this guidance', exact=True).check()
+        page.get_by_role('button', name='Keep working', exact=True).click()
         page.get_by_role('button', name='Refresh guidance', exact=True).click()
         expect(page.get_by_text('Fixture guidance unavailable.', exact=True)).to_be_visible()
+        page.get_by_role('button', name='Finish workout', exact=True).click()
         checkbox = page.get_by_label('I’m following this guidance', exact=True)
         assert not checkbox.is_checked() and not checkbox.is_enabled()
         page.get_by_label('Why are you stopping?').select_option('interruption')
-        page.get_by_role('button', name='Finish workout', exact=True).click()
+        page.get_by_role('dialog', name='Finish workout?', exact=True).get_by_role('button', name='Finish workout', exact=True).click()
         choice = next(row for row in live_rows(page, 'event') if row.get('detail', {}).get('integration', {}).get('recordType') == 'session_choice')
         assert choice['detail']['integration']['advisoryId'] is None, 'an unavailable refresh clears the selected advisory'
         print(f'PASS {engine}: failed refresh clears advisory selection before close')
@@ -318,14 +326,17 @@ def health_context_journey(browser, engine, url):
         page.route('**/api/health-context', lambda route: guidance(route))
         page.get_by_role('button', name='Start Day 1', exact=True).click()
         expect(page.get_by_text('Fixture guidance.', exact=True)).to_be_visible()
+        page.get_by_role('button', name='Finish workout', exact=True).click()
         page.get_by_label('I’m following this guidance', exact=True).check()
+        page.get_by_role('button', name='Keep working', exact=True).click()
         page.get_by_role('button', name='‹ Home', exact=True).click()
         page.get_by_role('button', name='Resume workout', exact=True).click()
         expect(page.get_by_text('Fixture guidance.', exact=True)).to_be_visible()
+        page.get_by_role('button', name='Finish workout', exact=True).click()
         checkbox = page.get_by_label('I’m following this guidance', exact=True)
         assert not checkbox.is_checked(), 'leaving and resuming clears the previous selection'
         page.get_by_label('Why are you stopping?').select_option('time')
-        page.get_by_role('button', name='Finish workout', exact=True).click()
+        page.get_by_role('dialog', name='Finish workout?', exact=True).get_by_role('button', name='Finish workout', exact=True).click()
         choice = next(row for row in live_rows(page, 'event') if row.get('detail', {}).get('integration', {}).get('recordType') == 'session_choice')
         assert choice['detail']['integration']['advisoryId'] is None, 'unmount clears the selected advisory before a later close'
         print(f'PASS {engine}: unmount clears the current advisory selection')
@@ -337,12 +348,13 @@ def health_context_journey(browser, engine, url):
         page.route('**/api/health-context', lambda route: guidance(route, ttl=1))
         page.get_by_role('button', name='Start Day 1', exact=True).click()
         expect(page.get_by_text('Fixture guidance.', exact=True)).to_be_visible()
+        page.get_by_role('button', name='Finish workout', exact=True).click()
         page.get_by_label('I’m following this guidance', exact=True).check()
         expect(page.get_by_text('Health guidance expired. Refresh to request a current copy.', exact=True)).to_be_visible(timeout=5000)
         checkbox = page.get_by_label('I’m following this guidance', exact=True)
         assert not checkbox.is_checked() and not checkbox.is_enabled()
         page.get_by_label('Why are you stopping?').select_option('difficulty')
-        page.get_by_role('button', name='Finish workout', exact=True).click()
+        page.get_by_role('dialog', name='Finish workout?', exact=True).get_by_role('button', name='Finish workout', exact=True).click()
         choice = next(row for row in live_rows(page, 'event') if row.get('detail', {}).get('integration', {}).get('recordType') == 'session_choice')
         assert choice['detail']['integration']['advisoryId'] is None, 'expired guidance cannot link at close'
         print(f'PASS {engine}: expired guidance cannot remain selected')

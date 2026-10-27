@@ -73,10 +73,15 @@ export function returnTargetChanges(data, slot, reduction) {
 export function startChanges(data, session, now = Date.now()) {
   const slots = new Set(live(data.session_slot).filter(row => row.session_id === session.id).map(row => row.id));
   const sets = live(data.set).filter(row => slots.has(row.session_slot_id));
-  if (sets.some(row => row.done_at != null)) return [];
+  const historicalSlots = new Set((data.session_slot ?? []).filter(row => row.session_id === session.id).map(row => row.id));
+  if (live(data.setting).some(row => row.id === `session-start:${session.id}`) ||
+      live(data.event).some(row => row.session_id === session.id && row.kind === 'logged') ||
+      (data.set ?? []).some(row => historicalSlots.has(row.session_slot_id) && row.done_at != null)) return [];
+  // Extra workouts keep the date selected in the calendar, including entries logged later.
   const local_date = session.program_day_id === null ? session.local_date : todayDate(now);
   return [{ table: 'session', row: { id: session.id, started_at: now, local_date } },
-    ...sets.map(row => ({ table: 'set', row: { id: row.id, local_date } }))];
+    ...sets.map(row => ({ table: 'set', row: { id: row.id, local_date } })),
+    { table: 'setting', row: { id: `session-start:${session.id}`, value: now } }];
 }
 
 export function finishChanges(data, session, now = Date.now(), early = false, reason = null, advisoryId = null) {

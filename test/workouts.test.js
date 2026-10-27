@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as workouts from '../domain/workouts.js';
 import { projectCalendar } from '../domain/calendar.js';
 import { withChanges } from '../domain/edits.js';
-import { finishChanges } from '../domain/session.js';
+import { finishChanges, startChanges } from '../domain/session.js';
 
 const run = { id:'r',program_id:'p',start_date:'2026-01-01',next_position:0,status:'active' };
 function fixture() {
@@ -39,6 +39,9 @@ test('borrowed workout snapshots targets without changing either program or adva
   assert.equal(session.program_day_id,null);
   assert.equal(next.set[0].target_reps_min,4);
   assert.equal(next.set[0].local_date,'2026-01-02');
+  const loggedLater = withChanges(next, startChanges(next, session, Date.parse('2026-01-04T18:00:00Z')));
+  assert.equal(loggedLater.session[0].local_date, '2026-01-02', 'Calendar-selected date survives later data entry');
+  assert.equal(loggedLater.set[0].local_date, '2026-01-02');
   assert.deepEqual(dates(next),['d0','d1','d2',null,null]);
   assert.deepEqual(finishChanges(next,session).map(change=>change.table),['session']);
   assert.deepEqual(data,before);

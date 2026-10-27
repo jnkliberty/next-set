@@ -73,10 +73,32 @@ test('first log dates every set to the training day, then keeps that date after 
   const data={session_slot:[{id:'slot',session_id:'new'}],set:[{id:'a',session_slot_id:'slot',done_at:null},{id:'b',session_slot_id:'slot',done_at:null}]};
   const session={id:'new',local_date:'2026-01-01',started_at:1};
   const changes=sessions.startChanges(data,session,Date.parse('2026-01-03T05:30:00Z'));
-  assert.deepEqual(changes.map(change=>[change.table,change.row.id,change.row.local_date]),[['session','new','2026-01-02'],['set','a','2026-01-02'],['set','b','2026-01-02']]);
+  assert.deepEqual(changes.filter(change=>change.table!=='setting').map(change=>[change.table,change.row.id,change.row.local_date]),[['session','new','2026-01-02'],['set','a','2026-01-02'],['set','b','2026-01-02']]);
   assert.equal(changes[0].row.started_at,Date.parse('2026-01-03T05:30:00Z'));
   data.set[0].done_at=1;
   assert.deepEqual(sessions.startChanges(data,{...session,local_date:'2026-01-02'},Date.parse('2026-01-03T07:00:00Z')),[]);
+});
+
+test('Undo and re-log retain the first training start and date across midnight', () => {
+  const before = Date.parse('2026-01-03T05:30:00Z'), after = Date.parse('2026-01-03T07:00:00Z');
+  const session = { id: 'new', program_day_id: 'day', local_date: '2026-01-01', started_at: 1 };
+  const data = { session: [session], session_slot: [{ id: 'slot', session_id: session.id }], set: [{ id: 'a', session_slot_id: 'slot', done_at: null }], setting: [], event: [] };
+  const started = withChanges(data, sessions.startChanges(data, session, before));
+  assert.equal(started.session[0].started_at, before);
+  assert.equal(started.session[0].local_date, '2026-01-02');
+  assert.deepEqual(sessions.startChanges(started, started.session[0], after), []);
+});
+
+test('older logged sessions keep their date after every set is undone or removed', () => {
+  const session = { id: 'old', program_day_id: 'day', local_date: '2026-01-02', started_at: 100 };
+  const data = { session_slot: [{ id: 'slot', session_id: session.id }], set: [{ id: 'a', session_slot_id: 'slot', done_at: null }], event: [{ id: 'logged', kind: 'logged', session_id: session.id }] };
+  assert.deepEqual(sessions.startChanges(data, session, Date.parse('2026-01-03T07:00:00Z')), []);
+  data.event[0].session_id = 'another';
+  data.session_slot[0].deleted_at = 200;
+  data.set[0] = { ...data.set[0], done_at: 100, deleted_at: 200 };
+  assert.deepEqual(sessions.startChanges(data, session, Date.parse('2026-01-03T07:00:00Z')), []);
+  data.set[0].done_at = null;
+  assert.equal(sessions.startChanges(data, session, Date.parse('2026-01-03T07:00:00Z'))[0].row.local_date, '2026-01-03');
 });
 
 test('a swapped slot keeps its original planned exercise',()=>{

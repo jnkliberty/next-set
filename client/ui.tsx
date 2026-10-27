@@ -3,6 +3,12 @@ import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 export type Row = Record<string, any>;
 export const numberText = (value: number | null) => value == null ? '' : String(Number(value.toFixed(2)));
 export const rangeText = (low: number | null, high: number | null) => low == null ? 'To failure' : low === high ? `${low}` : `${low} to ${high}`;
+export function saveStatus(status: Row) {
+  if (status.waiting) return `Saved here · ${status.waiting} waiting`;
+  if (status.error || status.check?.ok === false) return 'Saved here · review sync';
+  if (status.online === false) return 'Saved here · offline';
+  return status.check?.ok === true ? 'Saved here · 30-day set check passed' : 'Saved on this device';
+}
 const localDateFormatter = new Intl.DateTimeFormat('en-US', { weekday:'short', day:'numeric', month:'short', timeZone:'America/Chicago' });
 const utcDateFormatter = new Intl.DateTimeFormat('en-US', { weekday:'short', day:'numeric', month:'short', timeZone:'UTC' });
 export function dateText(value: string | number | null) {

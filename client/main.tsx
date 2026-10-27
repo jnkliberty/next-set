@@ -11,7 +11,7 @@ import { HistorySession, SessionSheet } from './SessionSheet';
 import { DayEditor, daySlots, slotSets } from './DayEditor';
 import { ProgramBuilder } from './ProgramBuilder';
 import { SwitchProgram, WorkoutPicker } from './WorkoutChoices';
-import { Button, Row, UndoBar, setUndoHandlers, undoPending } from './ui';
+import { Button, Row, UndoBar, setUndoHandlers, undoPending, saveStatus } from './ui';
 import { loadKg, sessionSummary } from '../domain/metrics.js';
 import { sessionFlow } from '../domain/session-flow.js';
 import './style.css';
@@ -102,10 +102,10 @@ function App() {
   return <div className={`app screen-${screen}`}><a className="skip" href="#content">Skip to content</a>
     {error&&<div className="error" role="alert"><p>{error}</p><button onClick={()=>setError('')}>Dismiss</button></div>}
     {status.error&&<button className="sync-error" role="status" onClick={()=>setPanel('session')}>{status.error}</button>}
-    {screen!=='lift'&&(screen!=='program'||!run)&&<header className="app-top"><button className="status" onClick={()=>local?.sync()}><span className={`dot${status.waiting||status.online===false?' pending':''}`} aria-hidden="true"/>{status.waiting?`${status.waiting} waiting`:status.online===false?'Offline · saved here':'Saved'}</button><button className="pill" onClick={()=>setPanel('session')}>Session</button></header>}
+    {screen!=='lift'&&(screen!=='program'||!run)&&<header className="app-top"><button className="status" onClick={()=>local?.sync()}><span className={`dot${status.waiting||status.online===false?' pending':''}`} aria-hidden="true"/>{saveStatus(status)}</button><button className="pill" onClick={()=>setPanel('session')}>Session</button></header>}
     {status.check?.ok===false&&<button className="mismatch" onClick={()=>setPanel('session')}>Saved sets differ · Review Session</button>}
     <main id="content">
-      {screen==='lift'&&session?<Logger data={data} local={local} session={session} back={()=>navigate('workout')} changed={refresh} fail={setError} openSession={()=>setPanel('session')} waiting={status.waiting} onSwap={(slot:Row)=>setEditor({step:'library',slot,session})}/>:
+      {screen==='lift'&&session?<Logger data={data} local={local} session={session} back={()=>navigate('workout')} changed={refresh} fail={setError} openSession={()=>setPanel('session')} status={status} onSwap={(slot:Row)=>setEditor({step:'library',slot,session})}/>:
       !run&&screen!=='progress'?<>{open&&<div className="page-list"><Button primary onClick={()=>startExtra(open.id)}>Resume workout</Button></div>}<ProgramList data={data} choose={chooseProgram} create={()=>setPanel('new-program')} extra={()=>setPanel('extra-workout')}/></>:
       screen==='calendar'?<Calendar data={data} run={run} local={local} refresh={refresh} fail={setError} chooseDay={chooseDay} showSession={showHistory} startExtra={(id:string)=>{setSessionId(id);setDayId(null);navigate('lift');}}/>:
       screen==='program'?<ProgramView data={data} run={run} local={local} refresh={refresh} fail={setError} next={day} chooseDay={chooseDay} editDay={(own:Row)=>setEditor({mode:'program',day:own})} start={()=>start()} startBusy={startBusy} chooseProgram={()=>setPanel('switch-program')}/>:
@@ -136,7 +136,7 @@ function Tabs({screen,navigate}:any){
 function selection(data:any,screen:string,sessionId:string|null,dayId:string|null){
   const currentRunId=live(data.setting).find((row:Row)=>row.id==='current_run')?.value;
   const run=byId(data.run).get(currentRunId)||live(data.run).filter((row:Row)=>row.status==='active'||row.status==='paused').at(-1);
-  const today=todayDate(), sessions=live(data.session), latestOpen=sessions.filter((row:Row)=>row.status==='open'&&(row.run_id??null)===(run?.id??null)&&(row.program_day_id!==null||row.local_date===today)).sort((a:Row,b:Row)=>b.started_at-a.started_at)[0];
+  const today=todayDate(), sessions=live(data.session), latestOpen=sessions.filter((row:Row)=>row.status==='open'&&(row.run_id??null)===(run?.id??null)).sort((a:Row,b:Row)=>b.started_at-a.started_at)[0];
   const open=latestOpen&&(!dayId||latestOpen.program_day_id===dayId)?latestOpen:null;
   const session=byId(data.session).get(sessionId)||open||(screen==='lift'?sessions.filter((row:Row)=>row.source==='app').sort((a:Row,b:Row)=>b.started_at-a.started_at)[0]:null);
   const projected=run&&screen!=='lift'?projectCalendar(data,run,today,addDays(today,366)):[];

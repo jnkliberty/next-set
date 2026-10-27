@@ -44,11 +44,16 @@ with sync_playwright() as p:
             print(f'{engine.name}: offline open {open_ms:.1f} ms',flush=True)
             context.set_offline(True)
             page.get_by_role('button',name=re.compile(r'^Start Day \d+$')).click()
+            page.locator('.exercise').first.wait_for()
+            for toggle in page.locator('.exercise button[aria-expanded]').all():
+                if toggle.get_attribute('aria-expanded')=='false':
+                    toggle.click()
             for i in range(20):
                 page.locator('.logger').wait_for()
                 # Lifts without fixture history ask for a starting weight.
                 weight=page.locator('.set-row:not(.done) input[id^="weight-"]').first
                 if weight.count() and weight.input_value()=='':weight.fill('50')
+                page.locator('.set-row:not(.done) input[id^="reps-"]').first.fill('6')
                 page.get_by_role('button',name=re.compile('^Log set')).first.click()
                 try:page.get_by_role('button',name='Skip',exact=True).click()
                 except Exception:

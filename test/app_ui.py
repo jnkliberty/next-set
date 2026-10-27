@@ -17,6 +17,13 @@ def rows(page, table):
     }""", table)
 
 
+def expand_exercises(page):
+    page.locator('.exercise').first.wait_for()
+    for toggle in page.locator('.exercise button[aria-expanded]').all():
+        if toggle.get_attribute('aria-expanded')=='false':
+            toggle.click()
+
+
 TYPE_SCALE={11,13,15,17,22,34}
 def assert_type_scale(page,name):
     # Every visible text node uses a size from the design scale (test/design.test.js holds the CSS side).
@@ -65,6 +72,7 @@ def run(engine, url):
         page.keyboard.press('Escape')
         page.get_by_role('button',name='Resume workout',exact=True).wait_for()
         page.get_by_role('button',name='Resume workout',exact=True).click()
+        expand_exercises(page)
         page.get_by_role('button',name=re.compile('^Log set')).first.wait_for()
         weight=page.get_by_label('Set 1 weight in kg').first
         expect(weight).to_have_value('')
@@ -75,6 +83,7 @@ def run(engine, url):
         assert weight.get_attribute('inputmode')=='decimal', 'Weight must open the number keyboard'
         weight.click();page.screenshot(path=str(screenshots/f'{engine.name}-pad.png'))
         weight.fill('0,75')
+        page.get_by_label('Set 1 reps',exact=True).first.fill('6')
         if engine.name=='chromium':context.new_cdp_session(page).send('Emulation.setCPUThrottlingRate',{'rate':4})
         page.wait_for_function('navigator.serviceWorker.controller !== null')
         context.set_offline(True)
@@ -83,7 +92,7 @@ def run(engine, url):
         first_logged=[r for r in rows(page,'set') if r.get('done_at') and not r['id'].startswith('past-')]
         assert len(first_logged)==1, {'count':len(first_logged),'alerts':page.get_by_role('alert').all_text_contents(),'errors':errors}
         assert first_logged[0]['weight']==0.75 and first_logged[0]['grams']==750, 'A comma decimal must save as 0.75 kg'
-        expect(page.locator('.bar-link.end')).to_have_text(f"{len(rows(page,'outbox'))} waiting")
+        expect(page.locator('.logger-save-status')).to_have_text(f"Saved here · {len(rows(page,'outbox'))} waiting")
         context.set_offline(False)
         page.request.post(url+'/__stop')
         started=perf_counter()
@@ -101,6 +110,7 @@ def run(engine, url):
         context.set_offline(True)
         assert len([r for r in rows(page,'set') if r.get('done_at') and not r['id'].startswith('past-')])==1
         page.evaluate('window.realNow=Date.now;Date.now=()=>window.realNow()+180000')
+        expand_exercises(page)
         page.get_by_role('button',name=re.compile('^Log set')).first.wait_for()
         page.screenshot(path=str(screenshots/f'{engine.name}-lifting.png'))
         page.emulate_media(color_scheme='dark');page.screenshot(path=str(screenshots/f'{engine.name}-lifting-dark.png'));page.emulate_media(color_scheme='light')
@@ -124,25 +134,26 @@ def run(engine, url):
         while rows(page,'outbox'):
             assert monotonic()<deadline,'The outbox did not drain after reconnect'
             page.wait_for_timeout(50)
-        expect(page.locator('header.app-top .status')).to_have_text('Saved')
+        expect(page.locator('header.app-top .status')).to_have_text('Saved here · 30-day set check passed')
         server=page.request.get(url+'/api/changes?since=0').json()['rows']
         saved=[item['row'] for item in server if item['table']=='set' and item['row'].get('done_at') and not item['row']['id'].startswith('past-')]
         assert len(saved)==6, {'engine':engine.name,'remote':len(saved),'local':len(logged),'pending':len(rows(page,'outbox'))}
         assert len({row['id'] for row in saved})==6
         page.get_by_role('button',name='Session',exact=True).click()
         page.get_by_role('button',name='Check now',exact=True).click()
-        page.get_by_text('All sets match the server.',exact=True).wait_for()
+        page.get_by_text('Sets in this date range matched the server at the last check.',exact=True).wait_for()
         toggle=page.get_by_role('switch').first
         assert toggle.bounding_box()['width']==52 and toggle.bounding_box()['height']==32
         assert not page.get_by_role('button',name='Close',exact=True).evaluate("node=>node.matches(':focus-visible')")
-        expect(page.get_by_text(re.compile('^Last check:'))).to_contain_text(re.compile(r'Last check: \w{3} \d{1,2} \w{3}'))
+        expect(page.get_by_text(re.compile('^Last check:'))).to_contain_text(re.compile(r'Last check: \w{3} \d{1,2}, \d{4}'))
+        expect(page.get_by_text(re.compile('^Set dates:'))).to_contain_text('Older sets and workout details are not checked.')
         page.screenshot(path=str(screenshots/f'{engine.name}-session.png'))
         page.get_by_role('button',name='Close',exact=True).click()
         capture_views(page,engine,screenshots)
         page.get_by_role('button',name='Session',exact=True).click()
         assert page.request.post(url+'/__plant').json()['planted']
         page.get_by_role('button',name='Check now',exact=True).click()
-        page.get_by_text('The set counts or contents differ.',exact=True).wait_for()
+        page.get_by_text('The set counts or contents differed at the last check.',exact=True).wait_for()
         page.get_by_role('button',name='Close',exact=True).click()
         page.get_by_role('button',name='Saved sets differ · Review Session',exact=True).wait_for()
         event_rows=[row for row in rows(page,'event') if row['kind']=='logged']
@@ -164,6 +175,7 @@ def finish_workout(page,engine,screenshots):
     for i in range(5):
         weight=page.locator('.set-row:not(.done) input[id^="weight-"]').first
         if weight.count() and weight.input_value()=='':weight.fill('50')
+        page.locator('.set-row:not(.done) input[id^="reps-"]').first.fill('6')
         page.get_by_role('button',name=re.compile('^Log set')).first.click()
         if i<4:
             rest=page.get_by_role('button',name='Skip',exact=True)
@@ -183,6 +195,7 @@ def finish_workout(page,engine,screenshots):
     page.screenshot(path=str(screenshots/f'{engine.name}-done.png'))
     page.wait_for_timeout(1100)
     page.get_by_role('button',name='See sets',exact=True).click()
+    expand_exercises(page)
     page.get_by_role('button',name=re.compile('^Undo set')).last.click()
     page.get_by_role('button',name=re.compile('^Log set')).first.click()
     assert page.get_by_role('heading',name='Workout complete',exact=True).count()==0, 'A second tap within one second must not log again'
@@ -208,6 +221,7 @@ def verify_session_start(engine,url):
         expect(page.get_by_role('button',name='Change Decline Press',exact=True)).to_be_visible()
         page.keyboard.press('Escape')
         page.get_by_role('button',name='Resume workout',exact=True).click()
+        expand_exercises(page)
         page.get_by_role('button',name=re.compile('^Log set')).first.wait_for()
         opened=[s for s in rows(page,'session') if s.get('status')=='open'][0]
         today=page.evaluate("new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date())")
@@ -215,6 +229,7 @@ def verify_session_start(engine,url):
         page.evaluate('Date.now=window.realNow')
         page.get_by_role('button',name=re.compile('^Weight in kg')).first.click()
         page.get_by_label('Set 1 weight in lb').first.fill('50')
+        page.get_by_label('Set 1 reps',exact=True).first.fill('6')
         page.get_by_role('button',name=re.compile('^Log set')).first.click()
         page.get_by_role('button',name='Skip',exact=True).click()
         expect(page.get_by_label('Set 2 weight in lb').first).to_have_value('')
@@ -228,6 +243,46 @@ def verify_session_start(engine,url):
         print(f'PASS {engine.name}: pre-opened workout uses training date; next set keeps 50 lb')
     finally:
         context.close();browser.close()
+
+
+def verify_overnight_resume(engine,url):
+    urllib.request.urlopen(urllib.request.Request(url+'/__reset',method='POST')).close()
+    browser=engine.launch();context=browser.new_context(viewport={'width':390,'height':844})
+    try:
+        context.add_init_script("""window.fixtureRealNow=Date.now;
+            if(!sessionStorage.getItem('fixture-offset'))sessionStorage.setItem('fixture-offset',String(Date.parse('2026-10-27T04:50:00Z')-Date.now()));
+            Date.now=()=>window.fixtureRealNow()+Number(sessionStorage.getItem('fixture-offset'));""")
+        page=context.new_page();page.goto(url)
+        page.get_by_role('button',name=re.compile('Sample Strength')).click()
+        page.get_by_role('button',name='Add individual workout',exact=True).click()
+        sheet=page.get_by_role('dialog')
+        sheet.locator('.card.list .list-row').first.click()
+        sheet.get_by_role('button',name='Add workout',exact=True).click()
+        bench=page.get_by_role('article',name='Bench Press',exact=True)
+        bench.get_by_role('button',name='Expand Bench Press',exact=True).click()
+        bench.get_by_label('Set 1 weight in kg',exact=True).fill('50')
+        bench.get_by_label('Set 1 reps',exact=True).fill('6')
+        bench.get_by_role('button',name='Log set 1',exact=True).click()
+        expect(bench.get_by_role('button',name='Undo set 1',exact=True)).to_be_visible()
+        original=next(row for row in rows(page,'session') if row.get('source')=='app' and row.get('program_day_id') is None)
+        page.get_by_role('button',name='‹ Home',exact=True).click()
+        page.evaluate("sessionStorage.setItem('fixture-offset',String(Number(sessionStorage.getItem('fixture-offset'))+86400000))")
+        page.reload()
+        expect(page.locator('.hero')).to_contain_text('Extra workout')
+        page.get_by_role('button',name='Resume workout',exact=True).click()
+        bench.get_by_role('button',name='Expand Bench Press',exact=True).click()
+        bench.get_by_role('button',name='Undo set 1',exact=True).click()
+        bench.get_by_label('Set 1 weight in kg',exact=True).fill('50')
+        bench.get_by_label('Set 1 reps',exact=True).fill('6')
+        page.wait_for_timeout(1100)
+        bench.get_by_role('button',name='Log set 1',exact=True).click()
+        expect(bench.get_by_role('button',name='Undo set 1',exact=True)).to_be_visible()
+        saved=next(row for row in rows(page,'session') if row['id']==original['id'])
+        assert saved['started_at']==original['started_at'] and saved['local_date']==original['local_date']=='2026-10-26'
+        own_slots={row['id'] for row in rows(page,'session_slot') if row['session_id']==original['id']}
+        assert all(row['local_date']=='2026-10-26' for row in rows(page,'set') if row['session_slot_id'] in own_slots)
+        print(f'PASS {engine.name}: extra workout resumes after midnight; Undo and re-log keep its start and training date')
+    finally:context.close();browser.close()
 
 
 def verify_schedule(engine,url):
@@ -286,6 +341,7 @@ def verify_extra_sets(engine,url):
         page.screenshot(path=f'data/proof/{engine.name}-extra-reach.png')
         assert page.get_by_role('button',name=re.compile('every week|from now on')).count()==0
         page.get_by_role('button',name='Today only',exact=True).click()
+        expand_exercises(page)
         page.get_by_role('button',name=re.compile('^Log set')).first.wait_for()
         page.screenshot(path=f'data/proof/{engine.name}-extra-logging.png')
         extra=next(s for s in rows(page,'session') if s.get('status')=='open')
@@ -293,6 +349,7 @@ def verify_extra_sets(engine,url):
         for i in range(2):
             weight=page.locator('.set-row:not(.done) input[id^="weight-"]').first
             if weight.count() and weight.input_value()=='':weight.fill('50')
+            page.locator('.set-row:not(.done) input[id^="reps-"]').first.fill('6')
             page.get_by_role('button',name=re.compile('^Log set')).first.click()
             if i==0:page.get_by_role('button',name='Skip',exact=True).click()
         page.get_by_role('heading',name='Workout complete',exact=True).wait_for()
@@ -380,15 +437,18 @@ def verify_add_set_and_finish(engine,url):
         page.get_by_role('button',name=re.compile('Sample Strength')).click()
         page.get_by_role('button',name=re.compile(r'^Start Day \d+$')).click()
         bench=page.get_by_role('article',name='Bench Press')
+        expand_exercises(page)
         expect(bench.get_by_label('Set 1 weight in kg')).to_have_value('')
         bench.get_by_role('button',name='+ Add set',exact=True).click()
         expect(bench.get_by_role('button',name=re.compile('^Log set'))).to_have_count(3)
         expect(bench.get_by_label('Set 3 weight in kg')).to_have_value('')
         assert_type_scale(page,'Logger')
         bench.get_by_label('Set 3 weight in kg').fill('102.5')
+        bench.get_by_label('Set 3 reps',exact=True).fill('6')
         bench.get_by_role('button',name='Log set 3',exact=True).click()
         page.once('dialog',lambda dialog:dialog.accept())
         page.get_by_role('button',name='Finish workout',exact=True).click()
+        page.get_by_role('dialog',name='Finish workout?',exact=True).get_by_role('button',name='Finish workout',exact=True).click()
         page.get_by_role('button',name='Done',exact=True).click()
         page.get_by_role('navigation',name='Main').wait_for()
         session=max((s for s in rows(page,'session') if s.get('source')=='app'),key=lambda s:s['started_at'])
@@ -402,6 +462,7 @@ def verify_add_set_and_finish(engine,url):
         # A save after the offer turns Undo off; the bar follows into an open sheet.
         page.get_by_role('button',name='Resume workout',exact=True).click()
         page.get_by_role('button',name='Finish workout',exact=True).click()
+        page.get_by_role('dialog',name='Finish workout?',exact=True).get_by_role('button',name='Finish workout',exact=True).click()
         page.get_by_role('button',name='Done',exact=True).click()
         page.get_by_role('navigation',name='Main').wait_for()
         page.get_by_role('button',name='Session',exact=True).click()
@@ -424,9 +485,11 @@ def verify_next_set_remove(engine,url):
         page.get_by_role('button',name=re.compile('Sample Strength')).click()
         page.get_by_role('button',name=re.compile(r'^Start Day \d+$')).click()
         bench=page.get_by_role('article',name='Bench Press',exact=True)
+        expand_exercises(page)
         weight=bench.get_by_label('Set 1 weight in kg',exact=True)
         expect(weight).to_have_value('')
         weight.fill('102.5')
+        bench.get_by_label('Set 1 reps',exact=True).fill('6')
         bench.get_by_role('button',name='Log set 1',exact=True).click()
         next_weight=bench.get_by_label('Set 2 weight in kg',exact=True);expect(next_weight).to_have_value('')
         next_weight.fill('95.5');bench.get_by_label('Set 2 reps',exact=True).fill('5')
@@ -434,6 +497,7 @@ def verify_next_set_remove(engine,url):
         expect(bench.get_by_label('Set 3 weight in kg',exact=True)).to_have_value('')
         page.reload();expect(page.get_by_role('article',name='Bench Press',exact=True)).to_be_visible()
         bench=page.get_by_role('article',name='Bench Press',exact=True)
+        expand_exercises(page)
         next_weight=bench.get_by_label('Set 2 weight in kg',exact=True)
         expect(next_weight).to_have_value('95.5');expect(bench.get_by_label('Set 2 reps',exact=True)).to_have_value('5')
         page.set_viewport_size({'width':1440,'height':900})
@@ -463,11 +527,13 @@ def verify_next_set_remove(engine,url):
         assert all(not row.get('deleted_at') for row in deleted if row.get('session_slot_id') in history_slots),'Past workout sets must remain live'
         undo.click()
         restored=page.get_by_role('article',name='Bench Press',exact=True);expect(restored).to_be_visible()
+        expand_exercises(page)
         expect(restored.get_by_label('Set 2 weight in kg',exact=True)).to_have_value('95.5')
         expect(restored.get_by_label('Set 2 reps',exact=True)).to_have_value('5')
         expect(restored.get_by_label('Set 3 weight in kg',exact=True)).to_have_value('')
         page.reload();expect(page.get_by_role('article',name='Bench Press',exact=True)).to_be_visible()
         restored=page.get_by_role('article',name='Bench Press',exact=True)
+        expand_exercises(page)
         expect(restored.get_by_label('Set 2 weight in kg',exact=True)).to_have_value('95.5')
         expect(restored.get_by_label('Set 2 reps',exact=True)).to_have_value('5')
         after={table:rows(page,table) for table in ['slot','slot_set']}
@@ -521,6 +587,7 @@ def verify_program_edit(engine,url):
 if __name__ == '__main__':
     with sync_playwright() as p:
         for engine in [p.chromium,p.webkit]:
+            verify_overnight_resume(engine,sys.argv[1])
             verify_schedule(engine,sys.argv[1])
             verify_extra_sets(engine,sys.argv[1])
             verify_reference_sources(engine,sys.argv[1])
