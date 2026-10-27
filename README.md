@@ -1,23 +1,28 @@
 # Next Set
 
-A private workout tracker for logging sets and seeing progress. React on the phone, SQLite on your server, and a local browser copy for offline use.
+My workout tracker for logging sets and seeing progress.
 
-**Status: in progress.** Set logging, supersets, saved drafts, body-area filters, and Progress charts have automated Chromium and WebKit checks. A physical iPhone workout trial remains. Historical imports still require review. Optional dated body-weight charts are implemented; they need a compatible Health service.
+**Status: in progress.** Compact exercise rows, blank rep and weight entries, and Progress charts are implemented. Health weight history is connected in the private release. A real iPhone workout test and import review remain.
 
-![Progress with invented Bench Press history, weekly work, and an activity calendar](progress.png)
+- Log weight and reps beside the previous session's sets.
+- Expand an exercise to enter blank reps and weights, resume a draft, or copy the previous set with Use last.
+- Swipe an exercise to reveal Remove, with Undo.
+- Keep workout dates through corrections and resume extra workouts after midnight.
+- Open the next superset set on demand. Choose a stop reason when finishing.
+- See local saves, pending sync, and the date range checked against the server.
+- Resume unfinished entries and follow superset rounds.
+- Find favorite exercises and read why a target was suggested.
+- Filter lift progress and weekly work by body area, then open the recorded sets.
+- See training activity over 4 weeks, 12 weeks, a year, or all history.
+- See dated weight readings and a seven-day trend when Health is connected.
 
-[Phone view](progress-phone.png).
+![Expandable workout rows with invented prior sets and blank rep and weight fields](workout.png)
 
-[Body-weight chart with invented readings](weight.png).
+![Progress with sample Bench Press history, weekly work, and an activity calendar](progress.png)
 
-- Log weight and reps beside the previous session's sets. Resume unfinished entries and follow superset rounds.
-- Enter each weight in a blank field, or resume a saved draft. Swipe an exercise to reveal Remove, with Undo.
-- Filter strength and weekly work by body area. Open the recorded sets behind a chart.
-- View dated weight readings and a seven-day trend when Health is connected.
-- Keep favorites and inspect the reason for a suggested target.
-- Save on the device before syncing. Export the records and restore a verified backup.
+[Phone Progress view](progress-phone.png). [Progress with sample weight history](weight.png).
 
-Screenshots and demo workouts use invented records. No personal records or paid workout programs are included.
+Screenshots use invented sample records. The working app and its data are private. The weight screenshot uses invented readings.
 
 ## Run locally
 
@@ -86,9 +91,9 @@ npm run build
 PLAYWRIGHT_PYTHON=.venv/bin/python npm test
 ```
 
-Tests use temporary databases and invented records. Linux browser setup can require `playwright install --with-deps`. The full-size fabricated workload passed the local performance check: save p95 was 37.4 ms in Chromium at 4× CPU slowdown and 24.0 ms in native WebKit; offline open took 613.0 ms and 221.8 ms. Cold downloads took 22.4 s and 10.2 s. Earlier timings on this shared host varied. This run and shared CI are not physical phone tests.
+Tests use temporary databases and invented records. Linux browser setup can require `playwright install --with-deps`. Automated browser checks do not replace a physical phone trial.
 
-The GitHub workflow checks builds, domain behavior, logging, and Progress. It does not publish or deploy. Maintain one source: test a change, approve its GitHub release, then deploy that same commit privately.
+The GitHub workflow checks builds, domain behavior, logging, and Progress. It does not publish or deploy. Deploy the same reviewed app files privately.
 
 ## Data and estimates
 
