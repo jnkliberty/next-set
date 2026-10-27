@@ -172,7 +172,8 @@ export function Logger({ data, local, session, back, changed, fail, openSession,
     try {
       const values = shownValues(set, slot);
       shown.current = null;
-      await local.save(changes); toggled.current.set(set.id, Date.now());
+      const restored = { base: draftBase({ ...set, done_at: null }), values, unit: unitOf(slot) };
+      await local.save(changes, null, {}, [[['draft', session.id, set.id], restored]]); toggled.current.set(set.id, Date.now());
       taps.current = 0; touched.current = null;
       await drafts.update({ ...set, done_at: null }, values, unitOf(slot), true);
       local.sync(); changed();

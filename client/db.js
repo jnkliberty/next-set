@@ -40,7 +40,7 @@ export async function openLocal(changed = (_event) => {}) {
   // fails inside the same transaction if this device saved anything since, or any touched row has a newer version.
   let saves = 0;
   const stale = () => Object.assign(new Error('Undo is off: something changed after that save.'), { stale: true });
-  async function save(changes, guard = null, expected = {}) {
+  async function save(changes, guard = null, expected = {}, restoredDrafts = []) {
     const names = [...new Set(changes.map(change => change.table))];
     const tx = db.transaction([...names, 'outbox', 'meta'], 'readwrite'), result = [], before = new Map(), after = new Map();
     try {
@@ -62,6 +62,7 @@ export async function openLocal(changed = (_event) => {}) {
         await tx.objectStore('outbox').put({ ...op, row_key: `${op.table}:${op.row.id}` });
       }));
       await clearSavedDrafts(tx, result);
+      for (const [key, value] of restoredDrafts) await tx.objectStore('meta').put(value, key);
       await tx.done; drafts.forgetSaved(result); saves++; notify(result);
       return { rows: result, undo: inverse((table, id) => before.get(`${table}:${id}`), changes), guard: { count: saves, revs: Object.fromEntries(after) } };
     } catch (error) {

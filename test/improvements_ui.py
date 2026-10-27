@@ -76,10 +76,22 @@ def run(engine, url):
         expect(press.get_by_role('button', name='Undo set 1', exact=True)).to_be_visible()
         assert not [row for row in rows(page, 'meta') if isinstance(row, dict) and row.get('values', {}).get('weight') == '237']
         page.wait_for_timeout(1050)
+        set_id = pounds.get_attribute('id').removeprefix('weight-')
+        page.evaluate("""id => { window.originalUndoPut = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function(value, key) {
+            if (this.name === 'meta' && Array.isArray(key) && key[0] === 'draft' && key[2] === id) throw new Error('Fixture rejected Undo draft');
+            return window.originalUndoPut.apply(this, arguments);
+        }; }""", set_id)
+        press.get_by_role('button', name='Undo set 1', exact=True).click()
+        expect(page.get_by_role('alert')).to_contain_text('Undo did not save.')
+        assert next(saved for saved in rows(page, 'set') if saved['id'] == set_id)['done_at'] is not None
+        page.evaluate('() => { IDBObjectStore.prototype.put = window.originalUndoPut; }')
+        page.get_by_role('button', name='Dismiss', exact=True).click()
+        page.wait_for_timeout(1050)
         press.get_by_role('button', name='Undo set 1', exact=True).click()
         page.reload()
         expand_exercises(page)
         expect(pounds).to_have_value('237')
+        expect(press.get_by_role('textbox', name='Set 1 reps', exact=True)).to_have_value('5')
         context.set_offline(False)
         wait_for_async(page, "async () => { try { return (await fetch('/api/health', {cache:'no-store'})).ok; } catch { return false; } }")
         assert not errors, errors
