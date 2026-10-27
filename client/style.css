@@ -38,6 +38,7 @@ svg{max-width:100%}
 
 /* Top bar and page header */
 .app-top{min-height:52px;padding:0 var(--s3);display:flex;justify-content:space-between;align-items:center}
+.app-top>.pill,.undo-bar>button{flex-shrink:0}
 .app-top .status{display:flex;align-items:center;gap:var(--s2);min-height:44px;font-size:var(--text-sub);color:var(--ink-muted);padding:0}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-subtle)}
 .dot.pending{background:transparent;border:2px solid var(--ink-muted)}
