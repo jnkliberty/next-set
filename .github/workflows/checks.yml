@@ -1,0 +1,24 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  fixture-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - run: npm ci
+      - run: pip install -r requirements-test.txt
+      - run: python -m playwright install --with-deps chromium webkit
+      - run: npm run build
+      - run: node --test --test-concurrency=1 test/progress.test.js test/body-weight.test.js test/metrics.test.js test/api.test.js test/api.body-weight.test.js test/integration.test.js test/session.test.js test/sync.test.js test/export.test.js test/progress-ui.test.js test/app.test.js test/compact-workout.test.js test/improvements.test.js test/journeys.test.js test/results.test.js
