@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { byId, exerciseIdentity, live, trainingRows } from '../domain/model.js';
 import { editProgram, editWorkout, withChanges } from '../domain/edits.js';
-import { Button, Row, Sheet, rangeText, saveUndoable } from './ui';
+import { Button, Row, Sheet, rangeText, saveUndoable, Icon } from './ui';
 import './program-editing.css';
 import { ExerciseHistory } from './ExerciseHistory';
 
@@ -50,7 +50,7 @@ export function DayEditor({ data, local, run, day: initialDay, session, mode, st
   const title = step === 'library' ? (slot ? 'Swap exercise' : `Add to Day ${day?.day ?? 1}`) : step === 'slot' ? slot?.name ?? data.exercise.find((row: Row) => row.id === slot?.exercise_id)?.name : step === 'setup' ? (slot ? 'Sets and reps' : 'Set up') : 'Edit day';
   if(history)return <ExerciseHistory data={data} exerciseId={history} close={()=>setHistory(null)}/>;
   return <Sheet title={title} close={close}>
-    {step !== 'day' && <button className="text-button back" onClick={back}>‹ Back</button>}
+    {step !== 'day' && <button className="text-button back" onClick={back} aria-label={step === 'setup' && !slot ? 'Back to library' : 'Back to day'}><Icon name="back"/>Back</button>}
     {step === 'day' && <DayStep data={data} day={day} extra={extra} slots={slots} apply={apply} busy={busy} mode={mode} scopes={scopes} scope={scope} setScope={setScope} open={(row: Row) => { setSlot(row); setStep('slot'); }} add={() => { setSlot(null); setPicked([]); setStep('library'); }}/>}
     {step === 'slot' && slot && <SlotMenu data={data} local={local} slot={slot} slots={slots} busy={busy} apply={apply} fail={fail} go={setStep} history={()=>setHistory(slot.exercise_id)}/>}
     {step === 'library' && <Library data={data} local={local} fail={fail} slots={slots} swap={!!slot} picked={picked} setPicked={setPicked} done={(ids: string[]) => slot ? apply([{ slot, action: 'swap', exerciseId: ids[0] }]) : setStep('setup')}/>}
@@ -70,7 +70,7 @@ function DayStep({ data, day, extra, slots, scopes, scope, setScope, open, add, 
       const name=slot.name??exercises.get(slot.exercise_id)?.name;
       return <div className={`day-editor-row${over===index?' drag-over':''}`} key={slot.id} data-slot-index={index}>
         <button className="drag-handle" disabled={busy} aria-label={`Drag to reorder ${name}`} onPointerDown={event=>{event.currentTarget.setPointerCapture(event.pointerId);setDrag(index);setOver(index);}} onPointerMove={event=>{if(drag!==null){const target=targetAt(event);if(target>=0)setOver(target);}}} onPointerUp={event=>{const target=targetAt(event);if(drag!==null&&target>=0&&target!==drag)apply([{slot,action:'reorder',targetPosition:target}]);setDrag(null);setOver(null);}} onPointerCancel={()=>{setDrag(null);setOver(null);}}>≡</button>
-        <button className="list-row" disabled={busy} onClick={() => open(slot)} aria-label={`Change ${name}`}><span className="row-main">{slot.group_kind==='superset'&&<span className="superset-mark">Superset {slots.findIndex((s:Row)=>s.group_id===slot.group_id)+1}</span>}<strong>{name}</strong><small>{sets.length} sets · {rangeText(first?.reps_min ?? first?.target_reps_min ?? null, first?.reps_max ?? first?.target_reps_max ?? null)} reps · {slot.rest_seconds??90} s rest</small></span><span className="more" aria-hidden="true">⋯</span></button></div>; })}
+        <button className="list-row" disabled={busy} onClick={() => open(slot)} aria-label={`Change ${name}`}><span className="row-main">{slot.group_kind==='superset'&&<span className="superset-mark">Superset {slots.findIndex((s:Row)=>s.group_id===slot.group_id)+1}</span>}<strong>{name}</strong><small>{sets.length} sets · {rangeText(first?.reps_min ?? first?.target_reps_min ?? null, first?.reps_max ?? first?.target_reps_max ?? null)} reps · {slot.rest_seconds??90} s rest</small></span><span className="more"><Icon name="more"/></span></button></div>; })}
       {!slots.length && <p className="list-row muted">No exercises yet.</p>}</div>
     {!extra && <MuscleSets data={data} day={day}/>}
     <div className="sheet-cta"><Button primary onClick={add}>+ Add exercise</Button></div>
@@ -140,7 +140,7 @@ function Library({ data, local, fail, slots, swap, picked, setPicked, done }: an
     <h4 className="caption">{results.length.toLocaleString('en-US')} exercises</h4>
     <div className="card list">{results.slice(0, limit).map((row: Row) => <div className="exercise-choice" key={row.id}><button className="list-row" aria-pressed={swap ? undefined : picked.includes(row.id)} onClick={() => toggle(row.id)}>
       <span className="row-main"><strong>{row.name}{row.source === 'exercisedb' && <em className="tag-new"> New</em>}</strong><small>{row.primary.map(capital).join(', ') || 'Conditioning'} · {capital(row.equipment)}</small></span>
-      <span className={`pick${picked.includes(row.id) ? ' on' : ''}`} aria-hidden="true">{picked.includes(row.id) ? '✓' : swap ? '›' : '+'}</span></button><button className="favorite" aria-label={`Favorite ${row.name}`} aria-pressed={favorites.has(row.id)} disabled={starring} onClick={() => favorite(row.id)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></svg></button></div>)}
+      <span className={`pick${picked.includes(row.id) ? ' on' : ''}`} aria-hidden="true"><Icon name={picked.includes(row.id) ? 'check' : swap ? 'next' : 'plus'}/></span></button><button className="favorite" aria-label={`Favorite ${row.name}`} aria-pressed={favorites.has(row.id)} disabled={starring} onClick={() => favorite(row.id)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></svg></button></div>)}
       {!results.length && <p className="list-row muted">No match. Try fewer words or another filter.</p>}</div>
     {results.length > limit && <Button onClick={() => setLimit(limit + 60)}>Show more</Button>}
     {!swap && <div className="sheet-cta"><Button primary disabled={!picked.length} onClick={() => done(picked)}>{picked.length ? `Add ${picked.length} exercise${picked.length > 1 ? 's' : ''}` : 'Pick exercises'}</Button></div>}
@@ -169,5 +169,5 @@ function Setup({ data, slot, picked, busy, save }: any) {
 }
 
 function Stepper({ label, value, set, min, max, step = 1 }: any) {
-  return <div className="config-stepper" role="group" aria-label={label}><span>{label}</span><button aria-label={`Decrease ${label.toLowerCase()}`} disabled={value <= min} onClick={() => set(Math.max(min, value - step))}>−</button><output>{value}</output><button aria-label={`Increase ${label.toLowerCase()}`} disabled={value >= max} onClick={() => set(Math.min(max, value + step))}>+</button></div>;
+  return <div className="config-stepper" role="group" aria-label={label}><span>{label}</span><button aria-label={`Decrease ${label.toLowerCase()}`} disabled={value <= min} onClick={() => set(Math.max(min, value - step))}><Icon name="minus"/></button><output>{value}</output><button aria-label={`Increase ${label.toLowerCase()}`} disabled={value >= max} onClick={() => set(Math.min(max, value + step))}><Icon name="plus"/></button></div>;
 }

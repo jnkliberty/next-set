@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { byId, exerciseIdentity, live, trainingRows } from '../domain/model.js';
 import { addExtraSets, editWorkout } from '../domain/edits.js';
-import { Button, Row, Sheet } from './ui';
+import { Button, Row, Sheet, Icon } from './ui';
 
 export function WorkoutEditor({ data, local, run, day, session, state, close, refresh, fail, created }: any) {
   const target=state.slot, initial=currentSets(data,target);
@@ -36,5 +36,5 @@ function currentSets(data:any,slot:Row){
 }
 
 function Stepper({label,value,set,min,max}:any){
-  return <div className="config-stepper" role="group" aria-label={label}><span>{label}</span><button aria-label={`Decrease ${label.toLowerCase()}`} disabled={value<=min} onClick={()=>set(Math.max(min,value-1))}>−</button><output>{value}</output><button aria-label={`Increase ${label.toLowerCase()}`} disabled={value>=max} onClick={()=>set(Math.min(max,value+1))}>+</button></div>;
+  return <div className="config-stepper" role="group" aria-label={label}><span>{label}</span><button aria-label={`Decrease ${label.toLowerCase()}`} disabled={value<=min} onClick={()=>set(Math.max(min,value-1))}><Icon name="minus"/></button><output>{value}</output><button aria-label={`Increase ${label.toLowerCase()}`} disabled={value>=max} onClick={()=>set(Math.min(max,value+1))}><Icon name="plus"/></button></div>;
 }

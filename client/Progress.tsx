@@ -6,7 +6,7 @@ import { BODY_AREAS, areaWork, liftSeries, matchesArea, progressData, progressRa
 import { ActivityCalendar, StrengthChart, WorkChart, Sparkline } from './ProgressCharts';
 import { BodyWeight } from './BodyWeight';
 import { weightHistoryStart } from '../domain/body-weight.js';
-import { Row, dateText } from './ui';
+import { Row, dateText, Icon } from './ui';
 import './progress.css';
 
 const number = (value: number) => value.toLocaleString('en-US', { maximumFractionDigits: 1 });
@@ -28,7 +28,7 @@ function ActualSet({ set, basis }: any) {
 function LiftRecords({ lift, showSession }: any) {
   return <details className="chart-data"><summary>Recorded sets · {lift.records.length} sessions</summary>
     <div className="record-list">{[...lift.records].reverse().map((row: Row) => <div className="record-row" key={row.sessionId}>
-      <button onClick={() => showSession(row.sessionId)} aria-label={`Open session ${recordDate(row.date)}`}>{recordDate(row.date)}<span aria-hidden="true">↗</span></button>
+      <button onClick={() => showSession(row.sessionId)} aria-label={`Open session ${recordDate(row.date)}`}>{recordDate(row.date)}<Icon name="open"/></button>
       <div>{row.sets.map((set: Row) => <p key={set.id}><ActualSet set={set} basis={lift.exercise?.weight_basis}/></p>)}
         {row.off && <p className="muted">Off session · excluded from the trend</p>}{row.provisional && <p className="muted">Imported · units await review</p>}
       </div></div>)}</div>
@@ -53,7 +53,7 @@ function LiftDetail({ lift, from, to, showSession }: any) {
       <p className="chart-note">{metric === 'estimate' ? 'Best estimate per normal session. Unrated sets assume two reps left.' : metric === 'load' && lift.exercise?.weight_basis === 'assisted' ? 'Assistance supplied by the machine. Less assistance means more body weight lifted.' : 'Best recorded value per normal session.'}</p>
       {metric === 'estimate' && change?.mark && <p className="chart-note">{change.mark === 'up' ? 'Increase' : 'Decrease'} exceeds the existing normal-variation threshold.</p>}
       {points.length === 1 && <p className="chart-note">One recorded point. A change appears after another session.</p>}
-      <div className="point-picker"><label><span>Recorded session</span><select aria-label="Recorded session" value={selected.sessionId} onChange={event => setSession(event.target.value)}>{[...points].reverse().map(row => <option value={row.sessionId} key={row.sessionId}>{recordDate(row.date)} · {number(row.value)} {unit}</option>)}</select></label><button onClick={() => showSession(selected.sessionId)}>See sets ↗</button></div>
+      <div className="point-picker"><label><span>Recorded session</span><select aria-label="Recorded session" value={selected.sessionId} onChange={event => setSession(event.target.value)}>{[...points].reverse().map(row => <option value={row.sessionId} key={row.sessionId}>{recordDate(row.date)} · {number(row.value)} {unit}</option>)}</select></label><button onClick={() => showSession(selected.sessionId)}>See sets<Icon name="open"/></button></div>
     </> : <div className="chart-empty"><h3>No comparable strength readings yet</h3><p>Recorded sets are below. Off sessions and imports awaiting review stay out of the trend.</p></div>}
     <LiftRecords lift={lift} showSession={showSession}/>
   </div>;

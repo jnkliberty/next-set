@@ -134,7 +134,7 @@ def run(engine, url):
         while rows(page,'outbox'):
             assert monotonic()<deadline,'The outbox did not drain after reconnect'
             page.wait_for_timeout(50)
-        expect(page.locator('header.app-top .status')).to_have_text('Saved here · 30-day set check passed')
+        expect(page.locator('header.app-top .status')).to_have_text('Synced · 30 days verified')
         server=page.request.get(url+'/api/changes?since=0').json()['rows']
         saved=[item['row'] for item in server if item['table']=='set' and item['row'].get('done_at') and not item['row']['id'].startswith('past-')]
         assert len(saved)==6, {'engine':engine.name,'remote':len(saved),'local':len(logged),'pending':len(rows(page,'outbox'))}
@@ -265,7 +265,7 @@ def verify_overnight_resume(engine,url):
         bench.get_by_role('button',name='Log set 1',exact=True).click()
         expect(bench.get_by_role('button',name='Undo set 1',exact=True)).to_be_visible()
         original=next(row for row in rows(page,'session') if row.get('source')=='app' and row.get('program_day_id') is None)
-        page.get_by_role('button',name='‹ Home',exact=True).click()
+        page.get_by_role('button',name='Home',exact=True).click()
         page.evaluate("sessionStorage.setItem('fixture-offset',String(Number(sessionStorage.getItem('fixture-offset'))+86400000))")
         page.reload()
         expect(page.locator('.hero')).to_contain_text('Extra workout')
