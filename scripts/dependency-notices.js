@@ -11,6 +11,7 @@ for (const [path, metadata] of Object.entries(lock.packages)) {
   sections.push(`${name} ${metadata.version}\n${files.map(file => readFileSync(join(path, file), 'utf8')).join('\n')}`);
   if (name === 'victory-vendor') sections.push(readFileSync('licenses/victory-vendor.txt', 'utf8'));
 }
+sections.push(`Geist font 1.7.2 (public/fonts)\n${readFileSync('licenses/geist-OFL.txt', 'utf8')}`);
 const notices = `Dependency licenses\n\n${sections.join('\n\n--------------------\n\n')}`.replace(/\r\n/g, '\n').trimEnd() + '\n';
 if (!process.argv.includes('--dry-run')) writeFileSync('public/dependency-licenses.txt', notices);
 console.log(`${process.argv.includes('--dry-run') ? 'Preview' : 'Wrote'} ${sections.length} dependency license sections.`);

@@ -4,7 +4,7 @@ import { addDays, projectCalendar, todayDate } from '../domain/calendar.js';
 import { withChanges } from '../domain/edits.js';
 import { createExtraWorkout, scheduleChanges, dayFocus } from '../domain/workouts.js';
 import { WorkoutEditor } from './WorkoutEditor';
-import { Button, Row, Sheet, dateText, saveUndoable } from './ui';
+import { Button, Row, Sheet, dateText, saveUndoable, Icon } from './ui';
 import './workout-choices.css';
 
 export const workoutLabel = (day: Row) => day.title || `Week ${day.week ?? 1} · Day ${day.day ?? day.position + 1}`;
@@ -15,7 +15,7 @@ export function SwitchProgram({data,run,choose,create,close}:any) {
     {live(data.program).map((program:Row)=>{
       const own=live(data.run).find((row:Row)=>row.program_id===program.id&&row.status!=='done');
       const count=live(data.program_day).filter((row:Row)=>row.program_id===program.id).length;
-      return <button className="list-row" key={program.id} disabled={busy} onClick={async()=>{setBusy(true);try{await choose(program.id);}finally{setBusy(false);}}}><span className="row-main"><strong>{program.name}</strong><small>{count} workouts · {own?.status==='paused'?'On leave':own?'In progress':'Not started'}</small></span>{program.id===run?.program_id&&<span>✓ Current</span>}</button>;
+      return <button className="list-row" key={program.id} disabled={busy} onClick={async()=>{setBusy(true);try{await choose(program.id);}finally{setBusy(false);}}}><span className="row-main"><strong>{program.name}</strong><small>{count} workouts · {own?.status==='paused'?'On leave':own?'In progress':'Not started'}</small></span>{program.id===run?.program_id&&<span className="current"><Icon name="check"/>Current</span>}</button>;
     })}</div><Button onClick={create}>New program</Button></Sheet>;
 }
 
@@ -38,7 +38,7 @@ export function WorkoutPicker({data,run,local,refresh,fail,close,startDay,starte
   if(custom)return <WorkoutEditor data={data} local={local} run={run} day={null} session={null} state={{action:'add',extraDate:date}} refresh={refresh} fail={fail} close={close} created={started}/>;
   return <Sheet title={extraOnly?'Add workout':'Train another day'} close={close}>
     <label>Program<select value={programId} onChange={event=>{setProgramId(event.target.value);setDayId('');}}>{live(data.program).map((row:Row)=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
-    <div className="card list">{days.map((own:Row)=><button className="list-row" key={own.id} aria-pressed={own.id===dayId} onClick={()=>setDayId(own.id)}><span className="row-main"><strong>{dayFocus(data,own)}</strong><small>Week {own.week??1} · Day {own.day??own.position+1}</small></span><span>{own.id===dayId?'✓ Selected':programId===run?.program_id&&done.has(own.position)?'Done':'›'}</span></button>)}</div>
+    <div className="card list">{days.map((own:Row)=><button className="list-row" key={own.id} aria-pressed={own.id===dayId} onClick={()=>setDayId(own.id)}><span className="row-main"><strong>{dayFocus(data,own)}</strong><small>Week {own.week??1} · Day {own.day??own.position+1}</small></span><span>{own.id===dayId?<><Icon name="check"/>Selected</>:programId===run?.program_id&&done.has(own.position)?'Done':<Icon name="next"/>}</span></button>)}</div>
     <Button onClick={()=>setCustom(true)}>Extra sets only</Button>
     {day&&<><h3>{borrowed?'Extra workout':`Train ${workoutLabel(day)}`}</h3><p>{slots.length} exercises · {dateText(date)}</p>
       {!extraOnly&&programId===run?.program_id&&!done.has(day.position)&&<label className="checkbox"><span>Keep this as an extra workout</span><input type="checkbox" checked={extra} onChange={event=>setExtra(event.target.checked)}/></label>}
@@ -65,7 +65,7 @@ export function ScheduleSheet({data,run,selected,initial,local,refresh,fail,clos
   }
   return <Sheet title={action==='move'?'Move workout':'Skip or push back'} close={close}><p>{workoutLabel(selected.day)} · {dateText(selected.date)}</p>
     {action==='move'?<><div className="date-strip" aria-label="New date">{Array.from({length:5},(_,i)=>addDays(selected.date,i+1)).map(value=><button key={value} aria-pressed={date===value} onClick={()=>setDate(value)}>{dateText(value)}</button>)}</div><label>Choose another date<input type="date" min={today} value={date} onChange={event=>setDate(event.target.value)}/></label></>:
-      <div className="schedule-options">{[['skip','Skip','This workout is removed. Later dates stay unchanged.'],['push','Push back','Every workout stays. Later workouts move one training slot.']].map(([value,label,description])=><button key={value} aria-pressed={action===value} onClick={()=>setAction(value)}><strong>{action===value?'✓ ':''}{label}</strong><span>{description}</span></button>)}</div>}
+      <div className="schedule-options">{[['skip','Skip','This workout is removed. Later dates stay unchanged.'],['push','Push back','Every workout stays. Later workouts move one training slot.']].map(([value,label,description])=><button key={value} aria-pressed={action===value} onClick={()=>setAction(value)}><strong>{action===value&&<Icon name="check"/>}{label}</strong><span>{description}</span></button>)}</div>}
     <h3>What changes</h3>{error?<p role="status">{error}</p>:<Preview rows={shown}/>}{warning&&<p>These dates create back-to-back training days.</p>}
     <Button primary disabled={busy||!!error} onClick={save}>{action==='move'?`Move to ${dateText(date)}`:action==='skip'?'Skip this workout':'Push everything back'}</Button>
   </Sheet>;

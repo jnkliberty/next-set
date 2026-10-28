@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { addDays, weekday } from '../domain/calendar.js';
 import { dateTime } from '../domain/progress.js';
-import { dateText } from './ui';
+import { dateText, Icon } from './ui';
 
 const number = (value: number) => value.toLocaleString('en-US', { maximumFractionDigits: 1 });
 const shortDate = (value: number | string) => new Date(typeof value === 'number' ? value : dateTime(value)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -67,7 +67,7 @@ function Heatmap({ days, metric }: any) {
 function ActivitySessions({ progress, showSession }: any) {
   const [day, setDay] = useState(''), selected = progress.days.find((row: any) => row.date === day) ?? [...progress.days].reverse().find((row: any) => row.sessions) ?? progress.days.at(-1);
   return <details className="chart-data"><summary>View sessions</summary><label className="activity-day">Training date<input aria-label="Training date" type="date" min={progress.from} max={progress.to} value={selected.date} onChange={event => setDay(event.target.value)}/></label>
-    {selected.sessionIds.length ? selected.sessionIds.map((id: string, i: number) => <button className="session-link" key={id} onClick={() => showSession(id)}>{dateText(selected.date)}{selected.sessionIds.length > 1 ? ` · session ${i + 1}` : ''}<span>See sets ↗</span></button>) : <p className="chart-note">No completed session on this date.</p>}
+    {selected.sessionIds.length ? selected.sessionIds.map((id: string, i: number) => <button className="session-link" key={id} onClick={() => showSession(id)}>{dateText(selected.date)}{selected.sessionIds.length > 1 ? ` · session ${i + 1}` : ''}<span>See sets<Icon name="open"/></span></button>) : <p className="chart-note">No completed session on this date.</p>}
   </details>;
 }
 
@@ -75,7 +75,7 @@ export function ActivityCalendar({ progress, allHistory, chooseYear, showSession
   const [metric, setMetric] = useState('sets'), days = progress.days, active = days.filter((row: any) => row.sessions).length;
   const years = Map.groupBy<string, any>(days, row => row.date.slice(0, 4));
   return <section className="progress-panel activity-panel"><div className="chart-heading"><h2>Activity</h2><select aria-label="Activity measure" value={metric} onChange={event => setMetric(event.target.value)}><option value="sets">Working sets</option><option value="minutes">Time · minutes</option><option value="volumeKg">Volume · kg</option></select></div>
-    {allHistory ? <div className="activity-years">{[...years].reverse().map(([year, own]) => <button key={year} onClick={() => chooseYear(year)}><strong>{year}</strong><span>{number(own.reduce((sum, row) => sum + row[metric], 0))} {metric === 'sets' ? 'sets' : metric === 'minutes' ? 'min' : 'kg'}<span aria-hidden="true"> ↗</span></span></button>)}</div> : <div className="activity-body"><div className="activity-reading"><strong>{active}</strong><span>active {active === 1 ? 'day' : 'days'}</span><p>{active ? `${number(progress.totals.sessions / Math.max(days.length / 7, 1))} sessions / week` : 'Your next session starts the pattern.'}</p></div><div className="activity-calendar"><Heatmap days={days} metric={metric}/><div className="heatmap-key" aria-hidden="true"><span>Less</span>{[0, 1, 2, 3, 4].map(value => <i className={`heat-${value}`} key={value}/>)}<span>More</span></div></div></div>}
+    {allHistory ? <div className="activity-years">{[...years].reverse().map(([year, own]) => <button key={year} onClick={() => chooseYear(year)}><strong>{year}</strong><span>{number(own.reduce((sum, row) => sum + row[metric], 0))} {metric === 'sets' ? 'sets' : metric === 'minutes' ? 'min' : 'kg'}<Icon name="open"/></span></button>)}</div> : <div className="activity-body"><div className="activity-reading"><strong>{active}</strong><span>active {active === 1 ? 'day' : 'days'}</span><p>{active ? `${number(progress.totals.sessions / Math.max(days.length / 7, 1))} sessions / week` : 'Your next session starts the pattern.'}</p></div><div className="activity-calendar"><Heatmap days={days} metric={metric}/><div className="heatmap-key" aria-hidden="true"><span>Less</span>{[0, 1, 2, 3, 4].map(value => <i className={`heat-${value}`} key={value}/>)}<span>More</span></div></div></div>}
     {metric === 'volumeKg' && progress.totals.incompleteVolume && <p className="chart-note">Partial volume. Some loads await review or lack a body-weight reading.</p>}
     <ActivitySessions progress={progress} showSession={showSession}/>
   </section>;

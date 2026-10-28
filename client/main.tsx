@@ -11,7 +11,7 @@ import { HistorySession, SessionSheet } from './SessionSheet';
 import { DayEditor, daySlots, slotSets } from './DayEditor';
 import { ProgramBuilder } from './ProgramBuilder';
 import { SwitchProgram, WorkoutPicker } from './WorkoutChoices';
-import { Button, Row, UndoBar, setUndoHandlers, undoPending, saveStatus } from './ui';
+import { Button, Row, UndoBar, setUndoHandlers, undoPending, saveStatus, Icon } from './ui';
 import { loadKg, sessionSummary } from '../domain/metrics.js';
 import { sessionFlow } from '../domain/session-flow.js';
 import './style.css';
@@ -160,8 +160,8 @@ function WorkoutView({data,selected,setEditor,start,startBusy,setSessionId,navig
   const edit=day&&!paused&&<button className="pill" onClick={()=>setEditor({step:'day'})}>Edit day</button>;
   return (<>
     <div className="field"><p className="eyebrow">{new Date(`${today}T12:00:00Z`).toLocaleDateString('en-US',{weekday:'long',day:'numeric',month:'short',timeZone:'UTC'})}</p>
-      <button className="switcher" onClick={switchProgram} aria-label={`${program?.name}, switch program`}><h1>{program?.name}</h1><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg></button>
-      <p>{day?`Week ${day.week??1} of ${weeks} · `:''}{finished} of {days.length} workouts</p></div>
+      <button className="switcher" onClick={switchProgram} aria-label={`${program?.name}, switch program`}><h1>{program?.name}</h1><Icon name="down"/></button>
+      <p>{day?`Week ${day.week??1} of ${weeks} · `:''}{finished} of {days.length} workouts</p><span className="meter-bar" aria-hidden="true"><span style={{width:`${days.length?finished/days.length*100:0}%`}}/></span></div>
     <div className="page-list home-layout">
       <section className="home-workout" aria-label="Next workout">
       {paused?<div className="card"><h2>On leave</h2><p className="muted">Your targets wait for you.</p></div>:open?<ResumeCard data={data} selected={selected} edit={edit}/>:day?<NextCard data={data} day={day} edit={edit}/>:null}
@@ -206,9 +206,9 @@ function WeekTiles({data,run,today}:any){
     if(row.date>=monday&&row.date<=today&&before!=null&&top>before)bests++;
     best.set(row.exercise_id,Math.max(before??0,top));
   }
-  return <><h2>This week so far · {weekdayName(monday)} to {weekdayName(today)}</h2><div className="stat-tiles">
-    <div><strong>{done} of {planned}</strong><small>workouts</small></div><div><strong>{kg.toLocaleString('en-US')}</strong><small>kg lifted</small></div>
-    <div><strong><span aria-hidden="true">★ </span>{bests}</strong><small>new bests</small></div></div></>;
+  return <><h2>This week · {weekdayName(monday)} to {weekdayName(today)}</h2><div className="stat-tiles">
+    <div><strong>{done}<span className="of"> of {planned}</span></strong><small>workouts</small></div><div><strong>{kg.toLocaleString('en-US')}</strong><small>kg lifted</small></div>
+    <div><strong><Icon name="star"/>{bests}</strong><small>new bests</small></div></div></>;
 }
 
 const MARKS:Record<string,string>={done:'Done',added:'Extra workout',planned:'Planned',not_done:'Not done',moved:'Moved',skipped:'Skipped',leave:'Leave',rest:'Rest'};
@@ -217,7 +217,7 @@ function WeekStrip({data,run,today}:any){
   return <ol className="week-strip" aria-label="This week">{days.map((row:Row)=>{
     const name=new Date(`${row.date}T12:00:00Z`).toLocaleDateString('en-US',{weekday:'short',timeZone:'UTC'});
     const kind=['done','added'].includes(row.state)?'done':row.date===today?'today':['planned','not_done','moved'].includes(row.state)?'plan':'rest';
-    return <li key={row.date} aria-label={`${name}: ${row.date===today?'today, ':''}${MARKS[row.state]??row.state}`}><span className={`mark ${kind}`} aria-hidden="true">{kind==='done'?'✓':kind==='rest'?'–':name[0]}</span><small aria-hidden="true">{name}</small></li>;
+    return <li key={row.date} aria-label={`${name}: ${row.date===today?'today, ':''}${MARKS[row.state]??row.state}`}><span className={`mark ${kind}`} aria-hidden="true">{kind==='done'?<Icon name="check"/>:kind==='rest'?<Icon name="dash"/>:name[0]}</span><small aria-hidden="true">{name}</small></li>;
   })}</ol>;
 }
 

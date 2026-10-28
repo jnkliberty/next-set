@@ -8,7 +8,7 @@ export function serveStatic(request, response, pathname) {
   let path = resolve(root, `.${decoded === '/' ? '/index.html' : decoded}`);
   if (!path.startsWith(`${root}${sep}`)) return false;
   if (!existsSync(path) && request.headers.accept?.includes('text/html')) path = resolve(root, 'index.html');
-  const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.txt': 'text/plain' };
+  const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.txt': 'text/plain', '.woff2': 'font/woff2' };
   if (!types[extname(path)] || !existsSync(path) || !statSync(path).isFile()) return false;
   response.writeHead(200, {
     'content-type': `${types[extname(path)]}; charset=utf-8`, 'x-content-type-options': 'nosniff',

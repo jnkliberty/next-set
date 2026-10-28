@@ -70,7 +70,7 @@ def run(engine, url):
             assert title.evaluate('(node) => node.scrollWidth <= node.clientWidth')
             title.evaluate('(node) => node.textContent = "Bench Press"')
             page.screenshot(path=str(proof / f'{engine.name}-expanded-{width}.png'))
-        page.get_by_role('button', name='‹ Home', exact=True).click()
+        page.get_by_role('button', name='Home', exact=True).click()
         page.get_by_role('button', name='Resume workout', exact=True).click()
         press.get_by_role('button', name='Expand Bench Press', exact=True).click()
         expect(weight).to_have_value('107.5')

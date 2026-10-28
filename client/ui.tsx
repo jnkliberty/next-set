@@ -7,7 +7,7 @@ export function saveStatus(status: Row) {
   if (status.waiting) return `Saved here · ${status.waiting} waiting`;
   if (status.error || status.check?.ok === false) return 'Saved here · review sync';
   if (status.online === false) return 'Saved here · offline';
-  return status.check?.ok === true ? 'Saved here · 30-day set check passed' : 'Saved on this device';
+  return status.check?.ok === true ? 'Synced · 30 days verified' : 'Saved on this device';
 }
 const localDateFormatter = new Intl.DateTimeFormat('en-US', { weekday:'short', day:'numeric', month:'short', timeZone:'America/Chicago' });
 const utcDateFormatter = new Intl.DateTimeFormat('en-US', { weekday:'short', day:'numeric', month:'short', timeZone:'UTC' });
@@ -17,6 +17,17 @@ export function dateText(value: string | number | null) {
   const parts = (typeof value === 'number' ? localDateFormatter : utcDateFormatter).formatToParts(date);
   const part = (type:string) => parts.find(value=>value.type===type)?.value;
   return `${part('weekday')} ${part('day')} ${part('month')}`;
+}
+
+// One stroke icon set (1.6 px lines, styled by .icon) replaces text glyphs.
+const ICONS = {
+  back: 'M15 5l-7 7 7 7', next: 'M9 5l7 7-7 7', down: 'M6 9l6 6 6-6',
+  plus: 'M12 5v14M5 12h14', minus: 'M5 12h14', check: 'M5 12.5l4.5 4.5L19 7.5', dash: 'M8 12h8',
+  more: 'M5 12a1.25 1.25 0 1 0 0 .01M12 12a1.25 1.25 0 1 0 0 .01M19 12a1.25 1.25 0 1 0 0 .01',
+  open: 'M8 16L16 8M10 8h6v6', star: 'm12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z',
+};
+export function Icon({ name }: { name: keyof typeof ICONS }) {
+  return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS[name]}/></svg>;
 }
 
 export function Sheet({ title, children, close }: { title: string; children: React.ReactNode; close: () => void }) {

@@ -4,7 +4,7 @@ import { byId, live, trainingRows } from '../domain/model.js';
 import { carryForwardReasonChanges, finishChanges, removeExerciseChanges, returnTargetChanges, skipRemainingChanges, startChanges } from '../domain/session.js';
 import { compareSet } from '../domain/metrics.js';
 import { HealthContext } from './HealthContext';
-import { Button, Row, dateText, numberText, rangeText, saveUndoable, saveStatus, Sheet } from './ui';
+import { Button, Row, dateText, numberText, rangeText, saveUndoable, saveStatus, Sheet, Icon } from './ui';
 import { WorkoutComplete } from './WorkoutComplete';
 import { ExerciseHistory } from './ExerciseHistory';
 import { useDrafts } from './useDrafts';
@@ -296,7 +296,7 @@ function ExerciseCard({ slot, index, session, group, addSet, sets, unit, shownVa
   }} onPointerCancel={() => { gesture.current = null; setRevealed(''); }}>
     {revealed && removable && <button className={`exercise-remove ${revealed}`} onClick={remove} disabled={busy}>Remove</button>}
     <article className={`card exercise${complete ? ' complete' : ''}${next?.session_slot_id === slot.id ? ' current' : ''}`} aria-label={slot.name}>
-    <header className="exercise-head"><h2><button className="exercise-toggle" data-uncounted aria-describedby={`exercise-group-${slot.id} exercise-summary-${slot.id}`} aria-expanded={expanded} aria-controls={`exercise-sets-${slot.id}`} aria-label={`${expanded ? 'Collapse' : 'Expand'} ${slot.name ?? exercise?.name}`} onClick={event => { if (!swiped.current || event.detail === 0) setExpanded(!expanded); swiped.current = false; }}><span><span id={`exercise-group-${slot.id}`} className="eyebrow group">{group}</span><span className="exercise-name">{slot.name ?? exercise?.name}</span><span id={`exercise-summary-${slot.id}`} className="muted exercise-summary">{completed > 0 ? `${completed} of ${sets.length}` : sets.length} {sets.length === 1 ? 'set' : 'sets'} · {timed ? 'Timed' : `${range} reps`}</span></span><span className="exercise-disclosure" aria-hidden="true">›</span></button></h2><button className="icon-button" aria-haspopup="dialog" aria-label={`Exercise menu for ${slot.name}`} onClick={menu}>⋯</button></header>
+    <header className="exercise-head"><h2><button className="exercise-toggle" data-uncounted aria-describedby={`exercise-group-${slot.id} exercise-summary-${slot.id}`} aria-expanded={expanded} aria-controls={`exercise-sets-${slot.id}`} aria-label={`${expanded ? 'Collapse' : 'Expand'} ${slot.name ?? exercise?.name}`} onClick={event => { if (!swiped.current || event.detail === 0) setExpanded(!expanded); swiped.current = false; }}><span><span id={`exercise-group-${slot.id}`} className="eyebrow group">{group}</span><span className="exercise-name">{slot.name ?? exercise?.name}</span><span id={`exercise-summary-${slot.id}`} className="muted exercise-summary">{completed > 0 ? `${completed} of ${sets.length}` : sets.length} {sets.length === 1 ? 'set' : 'sets'} · {timed ? 'Timed' : `${range} reps`}</span></span><span className="exercise-disclosure"><Icon name="next"/></span></button></h2><button className="icon-button" aria-haspopup="dialog" aria-label={`Exercise menu for ${slot.name}`} onClick={menu}><Icon name="more"/></button></header>
     <div className="exercise-notices" role="status" aria-live="polite" aria-atomic="true">
       {!expanded && pending && <p>Choose your starting weight.</p>}
       {!expanded && sets.some((set: Row) => drafts.conflict(set)) && <p>A set changed elsewhere. Open this exercise to review your draft.</p>}
@@ -304,7 +304,7 @@ function ExerciseCard({ slot, index, session, group, addSet, sets, unit, shownVa
     </div>
     <div id={`exercise-sets-${slot.id}`} hidden={!expanded}>
     <p className="muted subtitle">{subtitle}</p>
-    {pending && <div className="return"><p><strong>Back after {pending.days} days.</strong> Choose your starting weight.</p><div className="return-choices">{[0, 0.05, 0.1].map(reduction => <button key={reduction} className="pill" disabled={busy} onClick={() => chooseReturn(slot, reduction)}>{reduction === 0 ? 'Same' : `${reduction * 100}% lighter`}{pending.recommended === reduction ? ' ✓' : ''}</button>)}</div></div>}
+    {pending && <div className="return"><p><strong>Back after {pending.days} days.</strong> Choose your starting weight.</p><div className="return-choices">{[0, 0.05, 0.1].map(reduction => <button key={reduction} className="pill" disabled={busy} onClick={() => chooseReturn(slot, reduction)}>{reduction === 0 ? 'Same' : `${reduction * 100}% lighter`}{pending.recommended === reduction && <><Icon name="check"/><span className="sr-only"> (recommended)</span></>}</button>)}</div></div>}
     <div className={`set-table${timed ? ' timed' : ''}`} role="table" aria-label={`${slot.name} sets`}>
       <div className="set-row head" role="row"><span role="columnheader">Set</span><span role="columnheader">Last</span>{timed ? <span role="columnheader">Sec</span> : <><span role="columnheader"><button className="unit-switch" disabled={busy} aria-label={`Weight in ${unit}. Switch to ${unit === 'kg' ? 'lb' : 'kg'}`} onClick={() => switchUnit(slot)}>{unit}</button></span><span role="columnheader">Reps</span></>}<span role="columnheader" className="sr-only">Done</span></div>
       {sets.map((set: Row) => <SetRow key={set.id} {...{ set, slot, sets, index, unit, timed, shownValues, edit, log, toggle, busy, large, setLarge, pending, drafts, next }}/>)}
@@ -336,7 +336,7 @@ function SetRow({ set, slot, sets, index, unit, timed, shownValues, edit, log, t
 }
 
 function LoggerHeader({ back, day, index, openSession, status, remaining, doneCount, allSets }: any) {
-  return <>    <header className="bar"><button className="bar-link" onClick={back}>‹ Home</button><span className="bar-title">{day ? `Week ${day.week ?? 1} · Day ${day.day ?? day.position + 1}` : 'Extra sets'}</span><button className="bar-link end" onClick={openSession}>Session</button></header>
+  return <>    <header className="bar"><button className="bar-link" onClick={back}><Icon name="back"/>Home</button><span className="bar-title">{day ? `Week ${day.week ?? 1} · Day ${day.day ?? day.position + 1}` : 'Extra sets'}</span><button className="bar-link end" onClick={openSession}>Session</button></header>
     <div className="logger-head"><h1>{remaining.length ? index.program.get(day?.program_id)?.name ?? 'Extra sets' : 'Workout complete'}</h1><p className="muted">{doneCount} of {allSets.length} sets<span className="logger-save-status" role="status" aria-live="polite">{saveStatus(status)}</span></p><div className="progress" aria-hidden="true"><span style={{ width: `${allSets.length ? doneCount / allSets.length * 100 : 0}%` }}/></div></div>
 </>;
 }

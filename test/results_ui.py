@@ -119,7 +119,7 @@ def verify_historical_extra(page, folder, engine, session_id):
 
 
 def verify_paused_reopen(page):
-    page.get_by_role('button', name='‹ Home', exact=True).click()
+    page.get_by_role('button', name='Home', exact=True).click()
     page.get_by_role('navigation', name='Main').get_by_role('button', name='Program', exact=True).click()
     page.get_by_role('button', name='Options', exact=True).click()
     page.get_by_role('button', name='Pause for leave', exact=True).click()
@@ -137,7 +137,7 @@ def verify_paused_reopen(page):
     # Move past the logger's one-second double-tap guard before logging the same set again.
     page.wait_for_timeout(1100)
     page.get_by_role('article', name='Bench Press').get_by_role('button', name='Log set 1', exact=True).click()
-    page.get_by_role('button', name='‹ Home', exact=True).click()
+    page.get_by_role('button', name='Home', exact=True).click()
     page.get_by_role('navigation', name='Main').get_by_role('button', name='Program', exact=True).click()
     page.get_by_role('button', name='Options', exact=True).click()
     page.get_by_role('button', name='Return from leave', exact=True).click()

@@ -101,7 +101,7 @@ def exercise_charts(page):
     chart.focus()
     page.keyboard.press('ArrowRight')
     expect(page.locator('.strength-chart .progress-tooltip')).to_be_visible()
-    page.get_by_role('button', name='See sets ↗', exact=True).click()
+    page.get_by_role('button', name='See sets', exact=True).click()
     expect(page.get_by_role('dialog')).to_be_visible()
     page.get_by_role('button', name='Close', exact=True).click()
     expect(page.get_by_role('button', name='Chest', exact=True)).to_have_attribute('aria-pressed', 'true')

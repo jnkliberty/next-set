@@ -228,7 +228,7 @@ def finished_editor_journey(browser, engine, url):
         page.get_by_role('button',name='See sets',exact=True).click()
         page.get_by_role('button',name='Exercise menu for Bench Press',exact=True).click()
         page.get_by_role('button',name='Swap for today',exact=True).click()
-        page.get_by_role('button',name='‹ Back',exact=True).click()
+        page.get_by_role('button',name='Back to day',exact=True).click()
         expect(page.locator('.day-title')).to_have_text('Week 1 · Day 2')
         assert not [row for row in live_rows(page,'run_event') if row.get('position')==0 and row.get('kind')=='done']
         print(f'PASS {engine}: finished Day 2 editor keeps its own day while Day 1 remains next')
@@ -329,7 +329,7 @@ def health_context_journey(browser, engine, url):
         page.get_by_role('button', name='Finish workout', exact=True).click()
         page.get_by_label('I’m following this guidance', exact=True).check()
         page.get_by_role('button', name='Keep working', exact=True).click()
-        page.get_by_role('button', name='‹ Home', exact=True).click()
+        page.get_by_role('button', name='Home', exact=True).click()
         page.get_by_role('button', name='Resume workout', exact=True).click()
         expect(page.get_by_text('Fixture guidance.', exact=True)).to_be_visible()
         page.get_by_role('button', name='Finish workout', exact=True).click()
@@ -373,7 +373,7 @@ def health_context_journey(browser, engine, url):
         expect(page.locator('.logger')).to_be_visible()
         page.wait_for_timeout(100)
         assert len(pending) == 1, f'{engine}: expected one held advisory request'
-        page.get_by_role('button', name='‹ Home', exact=True).click()
+        page.get_by_role('button', name='Home', exact=True).click()
         expect(page.get_by_role('button', name='Resume workout', exact=True)).to_be_visible()
         now = datetime.now(timezone.utc)
         timestamp = lambda value: value.isoformat(timespec='milliseconds').replace('+00:00', 'Z')
