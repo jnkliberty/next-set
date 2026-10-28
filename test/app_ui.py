@@ -8,6 +8,17 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
 
+def tap_finish(page):
+    # Logging the last set leaves the workout open; Julian finishes it on purpose.
+    page.locator('.cta').get_by_role('button',name='Finish workout',exact=True).click()
+
+def open_card(scope, name):
+    # The current exercise now opens itself; open any other card only when it is still closed.
+    toggle = scope.get_by_role('button', name=re.compile(rf'^(Expand|Collapse) {re.escape(name)}$'))
+    if toggle.get_attribute('aria-expanded') == 'false':
+        toggle.click()
+
+
 def rows(page, table):
     return page.evaluate("""async table => {
       const request=indexedDB.open('workout-tracker');
@@ -38,6 +49,7 @@ def capture_views(page,engine,screenshots):
         for width in [320,375,768,1920]:
             page.set_viewport_size({'width':width,'height':844})
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),(name,width)
+            assert page.evaluate("[...document.querySelectorAll('.stat-tiles strong')].every(node=>node.getClientRects().length===1&&node.scrollWidth<=node.clientWidth)"),('stat on one line',name,width)
         page.set_viewport_size({'width':390,'height':844})
         assert_type_scale(page,name)
         if name=='Program':
@@ -145,7 +157,7 @@ def run(engine, url):
         toggle=page.get_by_role('switch').first
         assert toggle.bounding_box()['width']==52 and toggle.bounding_box()['height']==32
         assert not page.get_by_role('button',name='Close',exact=True).evaluate("node=>node.matches(':focus-visible')")
-        expect(page.get_by_text(re.compile('^Last check:'))).to_contain_text(re.compile(r'Last check: \w{3} \d{1,2}, \d{4}'))
+        expect(page.get_by_text(re.compile('^Last check:'))).to_contain_text(re.compile(r'Last check: \w{3} \d{1,2} \w{3}, \d{1,2}:\d{2} [AP]M'))
         expect(page.get_by_text(re.compile('^Set dates:'))).to_contain_text('Older sets and workout details are not checked.')
         page.screenshot(path=str(screenshots/f'{engine.name}-session.png'))
         page.get_by_role('button',name='Close',exact=True).click()
@@ -185,7 +197,7 @@ def finish_workout(page,engine,screenshots):
                 chip.click();expect(chip).to_have_attribute('aria-pressed','true')
                 chip.click();expect(chip).to_have_attribute('aria-pressed','false')
             rest.click();page.wait_for_timeout(150)
-    page.get_by_role('heading',name='Workout complete',exact=True).wait_for()
+    tap_finish(page);page.get_by_role('heading',name='Workout complete',exact=True).wait_for()
     effort=page.get_by_role('group',name='Session effort').get_by_role('button',name=re.compile('^7(?: selected)?$'))
     effort.click();expect(effort).to_have_attribute('aria-pressed','true')
     assert effort.bounding_box()['height']>=56
@@ -201,7 +213,7 @@ def finish_workout(page,engine,screenshots):
     assert page.get_by_role('heading',name='Workout complete',exact=True).count()==0, 'A second tap within one second must not log again'
     page.wait_for_timeout(1100)
     page.get_by_role('button',name=re.compile('^Log set')).first.click()
-    page.get_by_role('heading',name='Workout complete',exact=True).wait_for()
+    tap_finish(page);page.get_by_role('heading',name='Workout complete',exact=True).wait_for()
     completions=[r for r in rows(page,'run_event') if r.get('kind')=='done' and not r.get('deleted_at')]
     assert len(completions)==1, 'Undo and re-log must restore the completed program day'
 
@@ -259,7 +271,7 @@ def verify_overnight_resume(engine,url):
         sheet.locator('.card.list .list-row').first.click()
         sheet.get_by_role('button',name='Add workout',exact=True).click()
         bench=page.get_by_role('article',name='Bench Press',exact=True)
-        bench.get_by_role('button',name='Expand Bench Press',exact=True).click()
+        open_card(bench, 'Bench Press')
         bench.get_by_label('Set 1 weight in kg',exact=True).fill('50')
         bench.get_by_label('Set 1 reps',exact=True).fill('6')
         bench.get_by_role('button',name='Log set 1',exact=True).click()
@@ -270,7 +282,7 @@ def verify_overnight_resume(engine,url):
         page.reload()
         expect(page.locator('.hero')).to_contain_text('Extra workout')
         page.get_by_role('button',name='Resume workout',exact=True).click()
-        bench.get_by_role('button',name='Expand Bench Press',exact=True).click()
+        open_card(bench, 'Bench Press')
         bench.get_by_role('button',name='Undo set 1',exact=True).click()
         bench.get_by_label('Set 1 weight in kg',exact=True).fill('50')
         bench.get_by_label('Set 1 reps',exact=True).fill('6')
@@ -333,7 +345,7 @@ def verify_extra_sets(engine,url):
         page.get_by_role('navigation',name='Main').get_by_role('button',name='Calendar',exact=True).click()
         page.locator('.calendar-day.today').click()
         page.get_by_role('button',name='Add workout',exact=True).click()
-        page.get_by_role('button',name='Extra sets only',exact=True).click()
+        page.get_by_role('button',name='Choose exercises',exact=True).click()
         page.screenshot(path=f'data/proof/{engine.name}-extra-search.png')
         page.get_by_role('button',name=re.compile('^Decline Press')).click()
         page.screenshot(path=f'data/proof/{engine.name}-extra-sets.png')
@@ -352,7 +364,7 @@ def verify_extra_sets(engine,url):
             page.locator('.set-row:not(.done) input[id^="reps-"]').first.fill('6')
             page.get_by_role('button',name=re.compile('^Log set')).first.click()
             if i==0:page.get_by_role('button',name='Skip',exact=True).click()
-        page.get_by_role('heading',name='Workout complete',exact=True).wait_for()
+        tap_finish(page);page.get_by_role('heading',name='Workout complete',exact=True).wait_for()
         assert not any(r['kind']=='done' for r in rows(page,'run_event'))
         after={table:rows(page,table) for table in before}
         assert after==before,{table:{'before_count':len(before[table]),'after_count':len(after[table]),'changed':[row for row in after[table] if row not in before[table]]} for table in before if before[table]!=after[table]}
@@ -584,6 +596,43 @@ def verify_program_edit(engine,url):
     finally:context.close();browser.close()
 
 
+def verify_back_and_conflict(engine,url):
+    urllib.request.urlopen(urllib.request.Request(url+'/__reset',method='POST')).close()
+    browser=engine.launch();context=browser.new_context(viewport={'width':390,'height':844})
+    try:
+        page=context.new_page();page.goto(url)
+        page.get_by_role('button',name=re.compile('Sample Strength')).click()
+        nav=page.get_by_role('navigation',name='Main')
+        nav.get_by_role('button',name='Calendar',exact=True).click();nav.get_by_role('button',name='Program',exact=True).click()
+        page.get_by_role('button',name='Options',exact=True).click();page.get_by_role('dialog').wait_for()
+        page.go_back();expect(page.get_by_role('dialog')).to_have_count(0)
+        assert page.evaluate('location.hash')=='#program','Back with a sheet open must close the sheet only'
+        for i in range(2):page.get_by_role('button',name='Options',exact=True).click();page.get_by_role('button',name='Close',exact=True).click()
+        page.go_back();page.wait_for_function("location.hash==='#calendar'")
+        # Two tabs edit one day name; the later save is refused, not silently written over the first.
+        nav.get_by_role('button',name='Program',exact=True).click()
+        other=context.new_page();other.goto(url+'#program')
+        for tab in (page,other):
+            tab.get_by_role('navigation',name='Main').get_by_role('button',name='Program',exact=True).click()
+            tab.get_by_role('button',name=re.compile('^Edit ')).first.click();tab.get_by_label('Day name').click()
+        page.get_by_label('Day name').fill('From tab A');page.get_by_role('heading',name='Edit day').click()
+        page.wait_for_function("document.activeElement?.getAttribute('aria-label')!=='Day name'")
+        other.get_by_label('Day name').fill('From tab B');other.get_by_role('heading',name='Edit day').click()
+        expect(other.get_by_role('alert')).to_contain_text('Another screen changed this first')
+        titles=[d.get('title') for d in rows(other,'program_day')]
+        assert 'From tab A' in titles and 'From tab B' not in titles,titles
+        # The same for a sets form that was open while the other tab saved.
+        other.get_by_role('alert').get_by_role('button',name='Dismiss').evaluate('button=>button.click()');expect(other.get_by_role('alert')).to_have_count(0)
+        for tab in (page,other):
+            tab.get_by_role('dialog').get_by_role('button',name=re.compile('^Change ')).first.click();tab.get_by_role('button',name='Change sets',exact=True).click()
+        page.get_by_role('button',name='Increase sets',exact=True).click();page.get_by_role('button',name='Save sets',exact=True).click()
+        expect(page.get_by_role('heading',name='Edit day')).to_be_visible();page.wait_for_timeout(500)
+        other.get_by_role('button',name='Decrease sets',exact=True).click();other.get_by_role('button',name='Save sets',exact=True).click()
+        expect(other.get_by_role('alert')).to_contain_text('Another screen changed this first')
+        print(f'PASS {engine.name}: Back closes a sheet without changing tab, and a stale second tab cannot overwrite a day name')
+    finally:context.close();browser.close()
+
+
 if __name__ == '__main__':
     with sync_playwright() as p:
         for engine in [p.chromium,p.webkit]:
@@ -595,5 +644,6 @@ if __name__ == '__main__':
             verify_next_set_remove(engine,sys.argv[1])
             verify_add_set_and_finish(engine,sys.argv[1])
             verify_program_edit(engine,sys.argv[1])
+            verify_back_and_conflict(engine,sys.argv[1])
             run(engine,sys.argv[1])
             verify_session_start(engine,sys.argv[1])

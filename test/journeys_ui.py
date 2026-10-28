@@ -7,6 +7,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
+
+def open_card(scope, name):
+    # The current exercise now opens itself; open any other card only when it is still closed.
+    toggle = scope.get_by_role('button', name=re.compile(rf'^(Expand|Collapse) {re.escape(name)}$'))
+    if toggle.get_attribute('aria-expanded') == 'false':
+        toggle.click()
+
 OUT = Path('data/proof/journeys')
 OUT.mkdir(parents=True, exist_ok=True)
 AUDITS = []
@@ -258,7 +265,7 @@ def health_context_journey(browser, engine, url):
         receipt_ids = [row['id'] for row in live_rows(page, 'event') if row.get('detail', {}).get('integration', {}).get('recordType') == 'health_advisory']
         assert len(receipt_ids) == 1
         receipt_id = receipt_ids[0]
-        page.get_by_role('button',name='Expand Bench Press',exact=True).click()
+        open_card(page, 'Bench Press')
         page.get_by_label('Set 1 weight in kg').first.fill('50')
         page.get_by_label('Set 1 reps',exact=True).first.fill('6')
         page.get_by_role('button', name='Log set 1', exact=True).first.click()

@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { openLocal } from './db.js';
 import { live, byId, trainingRows } from '../domain/model.js';
@@ -11,7 +11,7 @@ import { HistorySession, SessionSheet } from './SessionSheet';
 import { DayEditor, daySlots, slotSets } from './DayEditor';
 import { ProgramBuilder } from './ProgramBuilder';
 import { SwitchProgram, WorkoutPicker } from './WorkoutChoices';
-import { Button, Row, UndoBar, setUndoHandlers, undoPending, saveStatus, Icon } from './ui';
+import { Button, Row, UndoBar, setUndoHandlers, undoPending, saveStatus, Icon, dateText, sheetHistory } from './ui';
 import { loadKg, sessionSummary } from '../domain/metrics.js';
 import { sessionFlow } from '../domain/session-flow.js';
 import './style.css';
@@ -59,9 +59,9 @@ function App() {
       await refresh();setLoaded(true);store.sync(); interval=setInterval(()=>store.sync(),30000);
       navigator.storage?.persist?.().catch(()=>{});
     }).catch(()=>{setLoaded(true);setError('Storage did not open. Reopen the app before you log a set.');});
-    const online=()=>handle.current?.sync(), hash=()=>setScreen(location.hash.slice(1)||'workout');
-    window.addEventListener('online',online);window.addEventListener('hashchange',hash);
-    return ()=>{mounted=false;clearInterval(interval);window.removeEventListener('online',online);window.removeEventListener('hashchange',hash);storage?.close();};
+    const online=()=>handle.current?.sync(), hash=()=>setScreen(location.hash.slice(1)||'workout'), skip=()=>{if(history.state?.skip){history.back();return;}const left=sheetHistory.skipHash;sheetHistory.skipHash=null;if(left===location.hash)history.back();};
+    window.addEventListener('online',online);window.addEventListener('hashchange',hash);window.addEventListener('popstate',skip);
+    return ()=>{mounted=false;clearInterval(interval);window.removeEventListener('online',online);window.removeEventListener('hashchange',hash);window.removeEventListener('popstate',skip);storage?.close();};
   },[]);
   useEffect(()=>{
     if(!('serviceWorker' in navigator)||!import.meta.env.PROD)return;
@@ -102,11 +102,11 @@ function App() {
   return <div className={`app screen-${screen}`}><a className="skip" href="#content">Skip to content</a>
     {error&&<div className="error" role="alert"><p>{error}</p><button onClick={()=>setError('')}>Dismiss</button></div>}
     {status.error&&<button className="sync-error" role="status" onClick={()=>setPanel('session')}>{status.error}</button>}
-    {screen!=='lift'&&(screen!=='program'||!run)&&<header className="app-top"><button className="status" onClick={()=>local?.sync()}><span className={`dot${status.waiting||status.online===false?' pending':''}`} aria-hidden="true"/>{saveStatus(status)}</button><button className="pill" onClick={()=>setPanel('session')}>Session</button></header>}
+    {screen!=='lift'&&(screen!=='program'||!run||status.waiting||status.online===false)&&<header className="app-top"><button className="status" onClick={()=>local?.sync()}><span className={`dot${status.waiting||status.online===false?' pending':''}`} aria-hidden="true"/>{saveStatus(status,live(data.set).some((row:Row)=>row.done_at!=null))}</button><button className="pill" onClick={()=>setPanel('session')}>Session</button></header>}
     {status.check?.ok===false&&<button className="mismatch" onClick={()=>setPanel('session')}>Saved sets differ · Review Session</button>}
     <main id="content">
       {screen==='lift'&&session?<Logger data={data} local={local} session={session} back={()=>navigate('workout')} changed={refresh} fail={setError} openSession={()=>setPanel('session')} status={status} onSwap={(slot:Row)=>setEditor({step:'library',slot,session})}/>:
-      !run&&screen!=='progress'?<>{open&&<div className="page-list"><Button primary onClick={()=>startExtra(open.id)}>Resume workout</Button></div>}<ProgramList data={data} choose={chooseProgram} create={()=>setPanel('new-program')} extra={()=>setPanel('extra-workout')}/></>:
+      !run&&screen!=='progress'?<>{screen==='calendar'&&<div className="field"><p>The calendar shows a program's schedule. Choose or create a program below. Workouts you finish without a program appear in Progress.</p></div>}{open&&<div className="page-list"><Button primary onClick={()=>startExtra(open.id)}>Resume workout</Button></div>}<ProgramList data={data} synced={status.check!=null} choose={chooseProgram}create={()=>setPanel('new-program')} extra={()=>setPanel('extra-workout')}/></>:
       screen==='calendar'?<Calendar data={data} run={run} local={local} refresh={refresh} fail={setError} chooseDay={chooseDay} showSession={showHistory} startExtra={(id:string)=>{setSessionId(id);setDayId(null);navigate('lift');}}/>:
       screen==='program'?<ProgramView data={data} run={run} local={local} refresh={refresh} fail={setError} next={day} chooseDay={chooseDay} editDay={(own:Row)=>setEditor({mode:'program',day:own})} start={()=>start()} startBusy={startBusy} chooseProgram={()=>setPanel('switch-program')}/>:
       screen==='progress'?<Suspense fallback={<div className="field" role="status">Opening progress…</div>}><Progress data={data} showSession={showHistory} local={local}/></Suspense>:<WorkoutView data={data} selected={selected} setEditor={setEditor} start={()=>start()} startBusy={startBusy} setSessionId={setSessionId} navigate={navigate} switchProgram={()=>setPanel('switch-program')} otherDay={()=>setPanel('other-day')} addWorkout={()=>setPanel('extra-workout')}/>}
@@ -159,7 +159,7 @@ function WorkoutView({data,selected,setEditor,start,startBusy,setSessionId,navig
   const weeks=Math.max(1,...days.map((row:Row)=>row.week??1)), finished=new Set(live(data.run_event).filter((row:Row)=>row.run_id===run.id&&row.kind==='done').map((row:Row)=>row.position)).size;
   const edit=day&&!paused&&<button className="pill" onClick={()=>setEditor({step:'day'})}>Edit day</button>;
   return (<>
-    <div className="field"><p className="eyebrow">{new Date(`${today}T12:00:00Z`).toLocaleDateString('en-US',{weekday:'long',day:'numeric',month:'short',timeZone:'UTC'})}</p>
+    <div className="field"><p className="eyebrow">{dateText(today)}</p>
       <button className="switcher" onClick={switchProgram} aria-label={`${program?.name}, switch program`}><h1>{program?.name}</h1><Icon name="down"/></button>
       <p>{day?`Week ${day.week??1} of ${weeks} · `:''}{finished} of {days.length} workouts</p><span className="meter-bar" aria-hidden="true"><span style={{width:`${days.length?finished/days.length*100:0}%`}}/></span></div>
     <div className="page-list home-layout">
@@ -172,7 +172,7 @@ function WorkoutView({data,selected,setEditor,start,startBusy,setSessionId,navig
       {!paused&&<WeekTiles data={data} run={run} today={today}/>}
       </section>
     </div>
-    <div className="cta">{open?<Button primary onClick={()=>{setSessionId(open.id);navigate('lift');}}>Resume workout</Button>:day&&!paused?<div className="split"><Button primary disabled={startBusy} onClick={start}>{startBusy?'Starting…':`Start Day ${day.day??day.position+1}`}</Button><Button onClick={otherDay}>Other day</Button></div>:<Button onClick={otherDay}>Train another day</Button>}</div>
+    <div className="cta">{open?<Button primary onClick={()=>{setSessionId(open.id);navigate('lift');}}>Resume workout</Button>:day&&!paused&&!daySlots(data,day).length?<Button primary onClick={()=>setEditor({mode:'program',day})}>Add exercises to Day {day.day??day.position+1}</Button>:day&&!paused?<div className="split"><Button primary disabled={startBusy} onClick={start}>{startBusy?'Starting…':`Start Day ${day.day??day.position+1}`}</Button><Button onClick={otherDay}>Other day</Button></div>:<Button onClick={otherDay}>Train another day</Button>}</div>
   </>);
 }
 
@@ -207,8 +207,20 @@ function WeekTiles({data,run,today}:any){
     best.set(row.exercise_id,Math.max(before??0,top));
   }
   return <><h2>This week · {weekdayName(monday)} to {weekdayName(today)}</h2><div className="stat-tiles">
-    <div><strong>{done}<span className="of"> of {planned}</span></strong><small>workouts</small></div><div><strong>{kg.toLocaleString('en-US')}</strong><small>kg lifted</small></div>
+    <div><strong>{done}<span className="of"> of {planned}</span></strong><small>workouts</small></div><div><FitNumber>{kg.toLocaleString('en-US')}</FitNumber><small>kg lifted</small></div>
     <div><strong><Icon name="star"/>{bests}</strong><small>new bests</small></div></div></>;
+}
+
+// Steps down the type scale until the number fits its tile on one line. A new tile width or value remounts FitStep, so it measures again from the largest size.
+function FitNumber({children}:{children:string}){
+  const [width,setWidth]=useState(0);
+  return <FitStep key={`${width}:${children}`} text={children} onWidth={setWidth}/>;
+}
+function FitStep({text,onWidth}:{text:string;onWidth:(width:number)=>void}){
+  const ref=useRef<HTMLElement>(null), [step,setStep]=useState(0);
+  useLayoutEffect(()=>{const node=ref.current;if(node&&step<3&&node.scrollWidth>node.clientWidth)setStep(step+1);},[step]);
+  useEffect(()=>{const tile=ref.current?.parentElement;if(!tile)return;const observer=new ResizeObserver(([entry])=>onWidth(Math.round(entry.contentRect.width)));observer.observe(tile);return()=>observer.disconnect();},[onWidth]);
+  return <strong ref={ref} className={`fit fit-${step}`}>{text}</strong>;
 }
 
 const MARKS:Record<string,string>={done:'Done',added:'Extra workout',planned:'Planned',not_done:'Not done',moved:'Moved',skipped:'Skipped',leave:'Leave',rest:'Rest'};

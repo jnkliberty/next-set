@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { byId, exerciseIdentity, live, trainingRows } from '../domain/model.js';
 import { editProgram, editWorkout, withChanges } from '../domain/edits.js';
-import { Button, Row, Sheet, rangeText, saveUndoable, Icon } from './ui';
+import { Button, Row, Sheet, rangeText, saveUndoable, Icon, customExercise } from './ui';
 import './program-editing.css';
 import { ExerciseHistory } from './ExerciseHistory';
 
@@ -33,6 +33,8 @@ export function DayEditor({ data, local, run, day: initialDay, session, mode, st
   const scopes = mode === 'program' ? [['week', 'This week only'], ['program', 'Every week']] : extra ? [['today', 'Today only']] : [['today', 'Today only'], ['future', 'From now on'], ['program', 'Every week']];
   const [scope, setScope] = useState(scopes[0][0]), [step, setStep] = useState(start?.step ?? 'day'), [slot, setSlot] = useState<Row | null>(start?.slot ?? null);
   const [picked, setPicked] = useState<string[]>([]), [busy, setBusy] = useState(false), [history,setHistory]=useState<string|null>(null);
+  // The data a form showed when it opened; another tab's save after that makes its save stale.
+  const opened = useRef(data); useEffect(() => { opened.current = data; }, [step, slot?.id]);
   const slots = daySlots(data, day, mode === 'today' ? session : null);
   async function apply(edits: Row[]) {
     if (busy) return; setBusy(true);
@@ -43,7 +45,11 @@ export function DayEditor({ data, local, run, day: initialDay, session, mode, st
         changes.push(...result.changes); current = withChanges(current, result.changes);
         if (mode === 'today') open = byId(current.session).get(result.sessionId);
       }
-      await saveUndoable(local, changes, `Saved · ${scopes.find(([key]) => key === scope)?.[1]}`); await refresh(); local.sync(); setStep('day'); setSlot(null); setPicked([]);
+      // Each existing row must still be at the version this screen showed (a renamed day: the version when typing began; the sets form: the version when it opened).
+      const seen = step === 'setup' ? opened.current : data;
+      const shown = (table: string, id: string) => edits.find((edit: Row) => edit.rev != null && table === 'program_day' && id === day?.id)?.rev ?? byId(seen[table] ?? []).get(id)?.rev;
+      const expected = Object.fromEntries(changes.filter(change => shown(change.table, change.row.id) != null).map(change => [`${change.table}:${change.row.id}`, shown(change.table, change.row.id)]));
+      await saveUndoable(local, changes, `Saved · ${scopes.find(([key]) => key === scope)?.[1]}`, expected); await refresh(); local.sync(); setStep('day'); setSlot(null); setPicked([]);
     } catch (error) { fail(error.message || 'The change did not save.'); } finally { setBusy(false); }
   }
   const back = () => setStep(step === 'setup' && !slot ? 'library' : 'day');
@@ -60,12 +66,15 @@ export function DayEditor({ data, local, run, day: initialDay, session, mode, st
 
 function DayStep({ data, day, extra, slots, scopes, scope, setScope, open, add, apply, busy, mode }: any) {
   const exercises = byId(data.exercise);
-  const [drag,setDrag]=useState<number|null>(null),[over,setOver]=useState<number|null>(null);
+  const [drag,setDrag]=useState<number|null>(null),[over,setOver]=useState<number|null>(null), typing=useRef<number|undefined>(undefined);
+  // The name field follows the saved title except while someone is typing in it, so another tab's rename cannot wipe the typing.
+  const [name,setName]=useState(day?.title??'');
+  useEffect(()=>{if(typing.current===undefined)setName(day?.title??'');},[day?.id,day?.title]);
   const targetAt=(event:React.PointerEvent)=>Number(document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-slot-index]')?.getAttribute('data-slot-index')??-1);
   return <>
     <h3 className="day-title">{extra ? 'Extra workout' : `Week ${day?.week ?? 1} · Day ${day?.day ?? 1}`}</h3>
     <div className="segmented" role="radiogroup" aria-label="Where changes go">{scopes.map(([key, label]: string[]) => <button key={key} role="radio" aria-checked={scope === key} onClick={() => setScope(key)}>{label}</button>)}</div>
-    {mode==='program'&&<label className="day-name">Day name<input key={day.id+':'+(day.title??'')} defaultValue={day.title??''} maxLength={200} onBlur={event=>{if(event.target.value.trim()!==(day.title??''))apply([{action:'title',title:event.target.value}]);}}/></label>}
+    {mode==='program'&&<label className="day-name">Day name<input value={name} maxLength={200} onChange={event=>setName(event.target.value)} onFocus={()=>{typing.current=day.rev;}} onBlur={()=>{const rev=typing.current;typing.current=undefined;if(name.trim()!==(day.title??''))apply([{action:'title',title:name,rev}]);}}/></label>}
     <div className="card list">{slots.map((slot: Row,index:number) => { const sets = slotSets(data, slot), first = sets[0];
       const name=slot.name??exercises.get(slot.exercise_id)?.name;
       return <div className={`day-editor-row${over===index?' drag-over':''}`} key={slot.id} data-slot-index={index}>
@@ -113,7 +122,7 @@ function rankedExercises(data: any, slots: Row[], favorites: Set<string>) {
 
 function Library({ data, local, fail, slots, swap, picked, setPicked, done }: any) {
   const [query, setQuery] = useState(''), [group, setGroup] = useState('All'), [equipment, setEquipment] = useState('Any');
-  const [favoritesOnly, setFavoritesOnly] = useState(false), [limit, setLimit] = useState(60), [starring, setStarring] = useState(false), savingStar = useRef(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false), [limit, setLimit] = useState(60), [starring, setStarring] = useState(false), savingStar = useRef(false), creating = useRef(false);
   const favorites = useMemo(() => {
     const exercises = byId(data.exercise);
     return new Set<string>(live(data.setting).filter((row: Row) => row.id.startsWith('favorite:') && row.value === true).map((row: Row) => row.id.slice(9)).filter((id: string) => exercises.has(id) && exerciseIdentity(exercises, id) === id));
@@ -123,7 +132,9 @@ function Library({ data, local, fail, slots, swap, picked, setPicked, done }: an
   useEffect(() => { if (!favorites.size) setFavoritesOnly(false); }, [favorites]);
   const muscles = GROUPS.find(([name]) => name === group)![1], words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const results = ranked.filter((row: Row) => (!favoritesOnly || favorites.has(row.id)) && (!muscles.length || row.primary.some((muscle: string) => muscles.includes(muscle))) && (equipment === 'Any' || row.equipment === equipment.toLowerCase())
-    && words.every(word => row.name.toLowerCase().includes(word)));
+    && words.every(word => row.name.toLowerCase().includes(word)))
+    // An exact name hides Create, so it must stay inside the shown page of results.
+    .sort((a: Row, b: Row) => Number(b.name.toLowerCase() === query.trim().toLowerCase()) - Number(a.name.toLowerCase() === query.trim().toLowerCase()));
   const toggle = (id: string) => swap ? done([id]) : setPicked(picked.includes(id) ? picked.filter((own: string) => own !== id) : [...picked, id]);
   async function favorite(id: string) {
     if (savingStar.current) return;
@@ -132,16 +143,27 @@ function Library({ data, local, fail, slots, swap, picked, setPicked, done }: an
     catch { fail('The favorite did not save. Try again.'); }
     finally { savingStar.current = false; setStarring(false); }
   }
+  // Only a visible exact match hides Create; one hidden by a filter would leave neither choice.
+  const name = query.trim(), exact = results.some((row: Row) => row.name.toLowerCase() === name.toLowerCase());
+  async function create() {
+    if (creating.current) return; creating.current = true;
+    const row = customExercise(name, equipment === 'Any' ? 'barbell' : equipment.toLowerCase(), muscles.slice(0, 1));
+    // The new row reaches the list on the next render; a swap still waits for the user's tap on it.
+    try { await local.save([{ table: 'exercise', row }]); local.sync(); setFavoritesOnly(false); if (!swap) setPicked((own: string[]) => [...own, row.id]); }
+    catch { fail('The exercise did not save. Try again.'); }
+    finally { creating.current = false; }
+  }
   return <>
-    <label className="search"><span className="sr-only">Search exercises</span><input type="search" placeholder={`Search ${ranked.length.toLocaleString('en-US')} exercises`} value={query} onChange={event => setQuery(event.target.value)}/></label>
+    <label className="search"><span className="sr-only">Search exercises</span><input type="search" placeholder={ranked.length ? `Search ${ranked.length.toLocaleString('en-US')} exercises` : 'Type an exercise name'} maxLength={200} value={query} onChange={event => setQuery(event.target.value)}/></label>
+    {name && !exact && <Button onClick={create}>Create “{name}” · {equipment === 'Any' ? 'Barbell' : equipment}</Button>}
     <Chips label="Muscle" options={GROUPS.map(([name]) => name)} value={group} set={setGroup}/>
     <Chips label="Equipment" options={EQUIPMENT} value={equipment} set={setEquipment}/>
     {favorites.size > 0 && <div className="filter-chips"><button aria-pressed={favoritesOnly} onClick={() => setFavoritesOnly(!favoritesOnly)}>Favorites</button></div>}
     <h4 className="caption">{results.length.toLocaleString('en-US')} exercises</h4>
     <div className="card list">{results.slice(0, limit).map((row: Row) => <div className="exercise-choice" key={row.id}><button className="list-row" aria-pressed={swap ? undefined : picked.includes(row.id)} onClick={() => toggle(row.id)}>
-      <span className="row-main"><strong>{row.name}{row.source === 'exercisedb' && <em className="tag-new"> New</em>}</strong><small>{row.primary.map(capital).join(', ') || 'Conditioning'} · {capital(row.equipment)}</small></span>
+      <span className="row-main"><strong>{row.name}{row.source === 'exercisedb' && <em className="tag-new"> New</em>}</strong><small>{row.primary.map(capital).join(', ') || (row.conditioning ? 'Conditioning' : 'No muscle set')} ·{capital(row.equipment)}</small></span>
       <span className={`pick${picked.includes(row.id) ? ' on' : ''}`} aria-hidden="true"><Icon name={picked.includes(row.id) ? 'check' : swap ? 'next' : 'plus'}/></span></button><button className="favorite" aria-label={`Favorite ${row.name}`} aria-pressed={favorites.has(row.id)} disabled={starring} onClick={() => favorite(row.id)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></svg></button></div>)}
-      {!results.length && <p className="list-row muted">No match. Try fewer words or another filter.</p>}</div>
+      {!results.length && <p className="list-row muted">{!ranked.length ? 'No exercises yet. Type a name above, then select Create.' : name ? 'No match. Select Create above, or try fewer words.' : 'No match. Try another filter.'}</p>}</div>
     {results.length > limit && <Button onClick={() => setLimit(limit + 60)}>Show more</Button>}
     {!swap && <div className="sheet-cta"><Button primary disabled={!picked.length} onClick={() => done(picked)}>{picked.length ? `Add ${picked.length} exercise${picked.length > 1 ? 's' : ''}` : 'Pick exercises'}</Button></div>}
   </>;
@@ -155,7 +177,7 @@ function Setup({ data, slot, picked, busy, save }: any) {
   const [plan, setPlan] = useState(() => initialPlan(data, slot)), exercises = byId(data.exercise), only = picked.length === 1 ? exercises.get(picked[0]) : null;
   const set = (key: string) => (value: number) => setPlan(previous => ({ ...previous, [key]: value }));
   return <>
-    {only && <p className="muted">{only.primary.concat(only.secondary).map(capital).join(', ')} · {capital(only.equipment)}</p>}
+    {only && <p className="muted">{only.primary.concat(only.secondary).map(capital).join(', ') || only.name} · {capital(only.equipment)}</p>}
     {only?.instructions && <div className="card how"><h4 className="caption">How to</h4><ol>{only.instructions.split('\n').map((step: string, i: number) => <li key={i}>{step}</li>)}</ol></div>}
     {!slot && picked.length > 1 && <p className="muted">{picked.map((id: string) => exercises.get(id)?.name).join(', ')}</p>}
     <Stepper label="Sets" value={plan.count} set={set('count')} min={1} max={8}/>

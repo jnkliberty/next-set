@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { carryForward, LB_TO_KG, weightIn, targetReason, targetReasonChange, targetReasons } from '../domain/targets.js';
+import { carryForward, LB_TO_KG, weightIn, targetReason, targetReasonChange, targetReasons, removeTargetReasons } from '../domain/targets.js';
 import { byId, live, trainingRows } from '../domain/model.js';
 import { carryForwardReasonChanges, finishChanges, removeExerciseChanges, returnTargetChanges, skipRemainingChanges, startChanges } from '../domain/session.js';
 import { compareSet } from '../domain/metrics.js';
@@ -90,7 +90,13 @@ export function Logger({ data, local, session, back, changed, fail, openSession,
     const from = unitOf(slot), to = from === 'kg' ? 'lb' : 'kg';
     drafts.switchUnit(slot, setsOf(slot), to, (value, unit) => text(convert(parse(value), unit, to)));
   }
-  const focus = (field: string, set: Row) => document.getElementById(`${field}-${set.id}`)?.focus();
+  // A refused value says why next to the field, then clears the message on the next keystroke.
+  const focus = (field: string, set: Row, message = '') => {
+    const input = document.getElementById(`${field}-${set.id}`) as HTMLInputElement | null;
+    if (!input) return;
+    input.setCustomValidity(message); input.reportValidity(); input.focus();
+    input.addEventListener('input', () => input.setCustomValidity(''), { once: true });
+  };
   const returnFor = (slot: Row) => live(data.setting).find((row: Row) => row.id === `return:${slot.id}`);
   const pendingReturn = (slot: Row) => { const setting = returnFor(slot); return setting?.value?.choice == null ? setting?.value : null; };
   const learned = (slot: Row, unit: string) => trainingRows(data).filter((row: Row) => row.exercise_id === slot.exercise_id).flatMap((row: Row) => row.sets.filter((set: Row) => set.unit === unit).map((set: Row) => set.weight));
@@ -99,10 +105,10 @@ export function Logger({ data, local, session, back, changed, fail, openSession,
     if (saving.current || !drafts.ready || drafts.conflict(set) || pendingReturn(slot)) return;
     const shownNow = shownValues(set, slot), unit = unitOf(slot);
     const weight = parse(shownNow.weight), reps = parse(shownNow.reps), seconds = parse(shownNow.seconds);
-    if (set.type === 'timed') { if (!seconds || seconds < 1 || seconds > 9999 || !Number.isInteger(seconds)) { focus('seconds', set); return; } }
+    if (set.type === 'timed') { if (!seconds || seconds < 1 || seconds > 9999 || !Number.isInteger(seconds)) { focus('seconds', set, 'Enter whole seconds from 1 to 9999.'); return false; } }
     else {
-      if (weight == null || weight < 0 || weight > 999.75) { focus('weight', set); return; }
-      if (!reps || reps < 1 || reps > 99 || !Number.isInteger(reps)) { focus('reps', set); return; }
+      if (weight == null || weight < 0 || weight > 999.75) { focus('weight', set, `Enter a weight from 0 to 999.75 ${unit}.`); return false; }
+      if (!reps || reps < 1 || reps > 99 || !Number.isInteger(reps)) { focus('reps', set, 'Enter whole reps from 1 to 99.'); return false; }
     }
     const max = Math.max(0, ...learned(slot, unit));
     if (!confirmed && set.type !== 'timed' && max > 0 && weight! > max * 1.7 && !live(data.setting).find((row: Row) => row.id === 'unusual_numbers_disabled')?.value) { setLarge(set.id); return; }
@@ -114,7 +120,6 @@ export function Logger({ data, local, session, back, changed, fail, openSession,
         : { id: set.id, weight, reps, unit, seconds: set.seconds ?? null, grams: Math.round(weight! * (unit === 'lb' ? LB_TO_KG : 1) * 1000), done_at: time };
       const initial = startChanges(data, session, time);
       const changes: any[] = [...initial, { table: 'set', row }, ...carryForwardReasonChanges(allSets, { ...set, ...row }), ...(session.status === 'open' ? [] : reopen())];
-      if (remaining.length === 1 && remaining[0].id === set.id) changes.push(...finishChanges(data, { ...session, ...initial[0]?.row }, time));
       await local.drafts.flush();
       await local.save(changes, null, { [`set:${set.id}`]: draftBase(set) });
       await local.record('logged', { saveMs: performance.now() - start, taps: taps.current, seconds: elapsed, weight: row.weight, reps: row.reps }, { session_id: session.id, set_id: set.id });
@@ -142,7 +147,8 @@ export function Logger({ data, local, session, back, changed, fail, openSession,
     const time = Date.now();
     if (time - (toggled.current.get(set.id) ?? 0) < 1000) return;
     toggled.current.set(set.id, time);
-    return set.done_at != null ? undo(set, slot) : log(set, slot);
+    // A refused value releases the double-tap guard, so a quick correction still logs.
+    return set.done_at != null ? undo(set, slot) : log(set, slot).then(ok => { if (ok === false) toggled.current.delete(set.id); });
   }
 
   const addSet = (slot: Row) => guarded(async () => {
@@ -157,6 +163,25 @@ export function Logger({ data, local, session, back, changed, fail, openSession,
     const explanation = targetReasonChange(row, row.type === 'timed' ? 'timed_plan' : 'added_set', suggested, suggested === row ? null : prior);
     try { await local.save([{ table: 'set', row }, explanation, ...(session.status === 'open' ? [] : reopen())]); local.sync(); changed(); }
     catch { fail('The extra set did not save.'); }
+  });
+
+  // Julian finishes on purpose: logging the last set no longer ends the workout.
+  // Mirrors removeExercise: re-read the set, refuse it if it changed or was logged elsewhere, and let Undo bring back its typed draft.
+  const removeSet = (setId: string) => guarded(async () => {
+    try {
+      const current = await local.snapshot(), set = live(current.set).find((row: Row) => row.id === setId);
+      if (!set || set.done_at != null || live(current.session).find((row: Row) => row.id === session.id)?.status !== 'open') throw new Error('This set changed. It was not removed.');
+      await local.drafts.flush();
+      const saved = await local.drafts.load(session.id), restore = saved[set.id];
+      await saveUndoable(local, [{ table: 'set', row: { id: set.id, deleted_at: Date.now() } }, ...removeTargetReasons(current, [set])], 'Set removed', { [`set:${set.id}`]: draftBase(set) },
+        restore ? () => drafts.restore({ [set.id]: restore }) : undefined);
+      local.sync(); changed();
+    } catch (error: any) { fail(error.message || 'The set was not removed. Try again.'); changed(); }
+  });
+
+  const finish = () => guarded(async () => {
+    try { await saveUndoable(local, finishChanges(data, session, Date.now()), 'Workout finished'); local.sync(); changed(); }
+    catch { fail('The workout did not finish. Try again.'); }
   });
 
   const finishEarly = () => {
@@ -242,7 +267,7 @@ export function Logger({ data, local, session, back, changed, fail, openSession,
   return <section className="logger" onClickCapture={count}>
     <LoggerHeader {...{ back, day, index, openSession, status, remaining, doneCount, allSets }}/>
     {nextSlot && flow.guided.has(nextSlot.id) && <button className="next-exercise" data-uncounted onClick={revealNext}>Next: {nextSlot.name}, set {setLabel(next, setsOf(nextSlot))}</button>}
-    {slots.map((slot: Row) => <ExerciseCard key={slot.id} {...{ slot, index, session, group: groupLabel(slot), addSet, sets: setsOf(slot), unit: unitOf(slot), shownValues, edit, switchUnit, log, toggle, busy: busy || !drafts.ready, large, setLarge, menu: () => setNotes(slot.id), remove: () => removeExercise(slot.id), removable: session.status === 'open', local, fail, pending: pendingReturn(slot), chooseReturn, next, drafts }}/>)}
+    {slots.map((slot: Row) => <ExerciseCard key={slot.id} {...{ slot, index, session, group: groupLabel(slot), addSet, removeSet, sets: setsOf(slot), unit: unitOf(slot), shownValues, edit, switchUnit, log, toggle, busy: busy || !drafts.ready, large, setLarge, menu: () => setNotes(slot.id), remove: () => removeExercise(slot.id), removable: session.status === 'open', local, fail, pending: pendingReturn(slot), chooseReturn, next, drafts }}/>)}
     {menuSlot && <ExerciseMenu {...{ slot: menuSlot, exercise: index.exercise.get(menuSlot.exercise_id), index, session, busy, local, fail, changed, onSwap, skip, addSet, remove: (slot: Row) => { setNotes(null); removeExercise(slot.id); }, setHowTo, setHistory }} sets={setsOf(menuSlot)} close={() => setNotes(null)}/>}
     {removeSlot && <Sheet title="Remove exercise?" close={() => setRemoveSlot(null)}><p>Remove {removeSlot.name} and its {removeSlot.logged} logged {removeSlot.logged === 1 ? 'set' : 'sets'} from this workout?</p><div className="sheet-cta"><Button onClick={() => setRemoveSlot(null)}>Keep exercise</Button><Button primary disabled={busy} onClick={() => removeExercise(removeSlot.id, removeSlot.logged)}>Remove exercise</Button></div></Sheet>}
     {historySheet}
@@ -253,6 +278,7 @@ export function Logger({ data, local, session, back, changed, fail, openSession,
       {rate && <Rating last={last} rating={rating}/>}
     </div>}
     {session.status === 'open' && <HealthContext session={session} data={data} local={local} onAdvisoryChange={advisoryChanged}/>}
+    {!remaining.length && session.status === 'open' && <div className="cta"><Button primary disabled={busy} onClick={finish}>Finish workout</Button></div>}
     {remaining.length > 0 && session.status === 'open' && <button className="text-button finish-early" disabled={busy} onClick={() => setFinishOpen(true)}>Finish workout</button>}
     {finishOpen && <Sheet title="Finish workout?" close={() => setFinishOpen(false)}><label>Why are you stopping?<select value={closeReason} onChange={event => setCloseReason(event.target.value)}><option value="">Choose if useful</option><option value="time">Time</option><option value="interruption">Interruption</option><option value="recovery">Recovery</option><option value="difficulty">Difficulty</option><option value="manual">Manual choice</option></select></label><label className="checkbox"><input type="checkbox" checked={linkAdvisory && !!availableAdvisory && Date.parse(availableAdvisory.validUntil) > Date.now()} disabled={!availableAdvisory || Date.parse(availableAdvisory.validUntil) <= Date.now()} onChange={event => setLinkAdvisory(event.target.checked)}/>I’m following this guidance</label><div className="sheet-cta"><Button onClick={() => setFinishOpen(false)}>Keep working</Button><Button primary disabled={busy} onClick={finishEarly}>Finish workout</Button></div></Sheet>}
   </section>;
@@ -273,11 +299,11 @@ function describe(first: Row | undefined, index: any, session: Row) {
   return { range, subtitle: `${range} reps`, reason: null };
 }
 
-function ExerciseCard({ slot, index, session, group, addSet, sets, unit, shownValues, edit, switchUnit, log, toggle, busy, large, setLarge, menu, remove, removable, local, fail, pending, chooseReturn, next, drafts }: any) {
+function ExerciseCard({ slot, index, session, group, addSet, removeSet, sets, unit, shownValues, edit, switchUnit, log, toggle, busy, large, setLarge, menu, remove, removable, local, fail, pending, chooseReturn, next, drafts }: any) {
   const exercise = index.exercise.get(slot.exercise_id), first = sets.find((set: Row) => set.done_at == null) ?? sets[0];
   const { range, subtitle, reason } = describe(first, index, session);
   const timed = sets.some((set: Row) => set.type === 'timed'), completed = sets.filter((set: Row) => set.done_at != null).length, complete = completed === sets.length;
-  const [expanded, setExpanded] = useState(false), [revealed, setRevealed] = useState(''), gesture = useRef<any>(null), swiped = useRef(false);
+  const [opened, setExpanded] = useState<boolean | null>(null), expanded = opened ?? next?.session_slot_id === slot.id, [revealed, setRevealed] = useState(''), gesture = useRef<any>(null), swiped = useRef(false);
   return <div className={`exercise-swipe${revealed ? ` reveal-${revealed}` : ''}`} onPointerDown={event => {
     const target = event.target as HTMLElement, toggle = target.closest('.exercise-toggle');
     if (!removable || !event.isPrimary || (!toggle && target.closest('button,input,textarea,select,[contenteditable=true]'))) return;
@@ -309,7 +335,7 @@ function ExerciseCard({ slot, index, session, group, addSet, sets, unit, shownVa
       <div className="set-row head" role="row"><span role="columnheader">Set</span><span role="columnheader">Last</span>{timed ? <span role="columnheader">Sec</span> : <><span role="columnheader"><button className="unit-switch" disabled={busy} aria-label={`Weight in ${unit}. Switch to ${unit === 'kg' ? 'lb' : 'kg'}`} onClick={() => switchUnit(slot)}>{unit}</button></span><span role="columnheader">Reps</span></>}<span role="columnheader" className="sr-only">Done</span></div>
       {sets.map((set: Row) => <SetRow key={set.id} {...{ set, slot, sets, index, unit, timed, shownValues, edit, log, toggle, busy, large, setLarge, pending, drafts, next }}/>)}
     </div>
-    <button className="add-set" disabled={busy} onClick={() => addSet(slot)}>+ Add set</button>
+    <div className="set-actions"><button className="add-set" disabled={busy} onClick={() => addSet(slot)}>+ Add set</button>{sets.length > 1 && sets.some((set: Row) => set.done_at == null) && <button className="add-set" disabled={busy} onClick={() => removeSet(sets.findLast((set: Row) => set.done_at == null).id)}>− Remove set</button>}</div>
     </div>
     </article>
   </div>;
@@ -337,7 +363,7 @@ function SetRow({ set, slot, sets, index, unit, timed, shownValues, edit, log, t
 
 function LoggerHeader({ back, day, index, openSession, status, remaining, doneCount, allSets }: any) {
   return <>    <header className="bar"><button className="bar-link" onClick={back}><Icon name="back"/>Home</button><span className="bar-title">{day ? `Week ${day.week ?? 1} · Day ${day.day ?? day.position + 1}` : 'Extra sets'}</span><button className="bar-link end" onClick={openSession}>Session</button></header>
-    <div className="logger-head"><h1>{remaining.length ? index.program.get(day?.program_id)?.name ?? 'Extra sets' : 'Workout complete'}</h1><p className="muted">{doneCount} of {allSets.length} sets<span className="logger-save-status" role="status" aria-live="polite">{saveStatus(status)}</span></p><div className="progress" aria-hidden="true"><span style={{ width: `${allSets.length ? doneCount / allSets.length * 100 : 0}%` }}/></div></div>
+    <div className="logger-head"><h1>{remaining.length ? index.program.get(day?.program_id)?.name ?? 'Extra sets' : 'All sets logged'}</h1><p className="muted">{doneCount} of {allSets.length} sets<span className="logger-save-status" role="status" aria-live="polite">{saveStatus(status)}</span></p><div className="progress" aria-hidden="true"><span style={{ width: `${allSets.length ? doneCount / allSets.length * 100 : 0}%` }}/></div></div>
 </>;
 }
 

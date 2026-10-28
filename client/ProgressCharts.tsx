@@ -5,7 +5,7 @@ import { dateTime } from '../domain/progress.js';
 import { dateText, Icon } from './ui';
 
 const number = (value: number) => value.toLocaleString('en-US', { maximumFractionDigits: 1 });
-const shortDate = (value: number | string) => new Date(typeof value === 'number' ? value : dateTime(value)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const shortDate = (value: number | string) => new Date(typeof value === 'number' ? value : dateTime(value)).toLocaleDateString('en-GB', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const compact = (value: number) => value >= 1000 ? `${number(value / 1000)}k` : number(value);
 
 function ChartTip({ active, payload, unit }: any) {

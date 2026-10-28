@@ -7,6 +7,13 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
 
+def open_card(scope, name):
+    # The current exercise now opens itself; open any other card only when it is still closed.
+    toggle = scope.get_by_role('button', name=re.compile(rf'^(Expand|Collapse) {re.escape(name)}$'))
+    if toggle.get_attribute('aria-expanded') == 'false':
+        toggle.click()
+
+
 AUDITS = []
 MATRICES = {
     'deutan': '0.367322 0.860646 -0.227968 0 0 0.280085 0.672501 0.047413 0 0 -0.011820 0.042940 0.968881 0 0 0 0 0 1 0',
@@ -97,7 +104,7 @@ def verify_historical_extra(page, folder, engine, session_id):
     page.get_by_role('dialog').get_by_role('button', name='Add workout', exact=True).click()
     page.get_by_role('dialog').locator('.card.list .list-row').first.click()
     page.get_by_role('dialog').get_by_role('button', name='Add workout', exact=True).click()
-    page.get_by_role('button', name='Expand Bench Press', exact=True).click()
+    open_card(page, 'Bench Press')
     page.get_by_role('article', name='Bench Press').get_by_role('textbox', name='Set 1 weight in kg', exact=True).fill('50')
     page.get_by_role('article', name='Bench Press').get_by_label('Set 1 reps', exact=True).fill('6')
     page.get_by_role('article', name='Bench Press').get_by_role('button', name='Log set 1', exact=True).click()
@@ -130,7 +137,7 @@ def verify_paused_reopen(page):
     expect(page.get_by_role('heading', name='Finished early', exact=True)).to_be_visible()
     assert rows(page, 'run')[0]['status'] == 'paused'
     page.get_by_role('button', name='See sets', exact=True).click()
-    page.get_by_role('button', name='Expand Bench Press', exact=True).click()
+    open_card(page, 'Bench Press')
     page.get_by_role('article', name='Bench Press').get_by_role('button', name='Undo set 1', exact=True).click()
     expect(page.get_by_role('article', name='Bench Press').get_by_role('button', name='Log set 1', exact=True)).to_be_visible()
     assert rows(page, 'run')[0]['status'] == 'paused'
@@ -143,7 +150,7 @@ def verify_paused_reopen(page):
     page.get_by_role('button', name='Return from leave', exact=True).click()
     page.get_by_role('navigation', name='Main').get_by_role('button', name='Home', exact=True).click()
     page.get_by_role('button', name='Resume workout', exact=True).click()
-    page.get_by_role('button', name='Expand Bench Press', exact=True).click()
+    open_card(page, 'Bench Press')
 
 
 def run(engine, url, folder):
@@ -158,7 +165,7 @@ def run(engine, url, folder):
         page.get_by_role('button', name=re.compile('Sample Strength')).click()
         page.get_by_role('button', name=re.compile(r'^Start Day \d+$')).click()
         bench = page.get_by_role('article', name='Bench Press')
-        bench.get_by_role('button', name='Expand Bench Press', exact=True).click()
+        open_card(bench, 'Bench Press')
         bench.get_by_role('textbox', name='Set 1 weight in kg', exact=True).fill('50')
         bench.get_by_label('Set 1 reps', exact=True).fill('6')
         bench.get_by_role('button', name='Log set 1', exact=True).click()

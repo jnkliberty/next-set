@@ -48,7 +48,9 @@ export async function openLocal(changed = (_event) => {}) {
       for (const [i, change] of changes.entries()) {
         const key = `${change.table}:${change.row.id}`, previous = current.has(key) ? current.get(key) : originals[i];
         if (guard && (saves !== guard.count || (previous?.rev ?? null) !== guard.revs[key])) throw stale();
-        if (expected[key] && draftBase(previous) !== expected[key]) throw new Error('This set changed. Choose the saved values or your draft before logging.');
+        // A number is the row version the screen showed; another tab or device saving first refuses this edit.
+        if (typeof expected[key] === 'number' && !before.has(key) && (previous?.rev ?? 0) !== expected[key]) throw new Error('Another screen changed this first. Check it and try again.');
+        if (typeof expected[key] === 'string' && draftBase(previous) !== expected[key]) throw new Error('This set changed. Choose the saved values or your draft before logging.');
         if (!before.has(key)) before.set(key, previous);
         const row = { ...previous, ...change.row, rev: (previous?.rev ?? 0) + 1, device_id: device, updated_at: Date.now(), deleted_at: Object.hasOwn(change.row, 'deleted_at') ? change.row.deleted_at : previous?.deleted_at ?? null };
         const operation = { id: crypto.randomUUID(), table: change.table, row };

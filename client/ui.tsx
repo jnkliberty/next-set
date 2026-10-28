@@ -3,14 +3,23 @@ import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 export type Row = Record<string, any>;
 export const numberText = (value: number | null) => value == null ? '' : String(Number(value.toFixed(2)));
 export const rangeText = (low: number | null, high: number | null) => low == null ? 'To failure' : low === high ? `${low}` : `${low} to ${high}`;
-export function saveStatus(status: Row) {
+export function saveStatus(status: Row, hasSets = true) {
   if (status.waiting) return `Saved here · ${status.waiting} waiting`;
   if (status.error || status.check?.ok === false) return 'Saved here · review sync';
   if (status.online === false) return 'Saved here · offline';
-  return status.check?.ok === true ? 'Synced · 30 days verified' : 'Saved on this device';
+  // An empty account has nothing to verify, so it claims only the connection.
+  return status.check?.ok === true ? hasSets ? 'Synced · 30 days verified' : 'Synced' : 'Saved on this device';
+}
+
+// A typed exercise the library lacks. The muscle and equipment filters in use become its labels.
+export function customExercise(name: string, equipment = 'barbell', primary: string[] = []) {
+  return { id: crypto.randomUUID(), name: name.trim(), aliases: [], equipment, primary, secondary: [], weight_basis: 'total', conditioning: false, pinned_note: '', source: 'custom' };
 }
 const localDateFormatter = new Intl.DateTimeFormat('en-US', { weekday:'short', day:'numeric', month:'short', timeZone:'America/Chicago' });
 const utcDateFormatter = new Intl.DateTimeFormat('en-US', { weekday:'short', day:'numeric', month:'short', timeZone:'UTC' });
+// Times read like dates: one zone, 12-hour, e.g. "Wed 28 Oct, 3:20 PM".
+const timeFormatter = new Intl.DateTimeFormat('en-US', { hour:'numeric', minute:'2-digit', timeZone:'America/Chicago' });
+export const dateTimeText = (value: number) => `${dateText(value)}, ${timeFormatter.format(value)}`;
 export function dateText(value: string | number | null) {
   if (value == null) return '';
   const date = new Date(typeof value === 'number' ? value : `${value}T12:00:00Z`);
@@ -30,10 +39,21 @@ export function Icon({ name }: { name: keyof typeof ICONS }) {
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS[name]}/></svg>;
 }
 
+// The hash of a skip entry the page still sits on; the next Back from it must not be a dead press.
+export const sheetHistory: { skipHash: string | null } = { skipHash: null };
+
 export function Sheet({ title, children, close }: { title: string; children: React.ReactNode; close: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { setUndo({ sheets: undo.sheets + 1 }); return () => setUndo({ sheets: undo.sheets - 1 }); }, []);
   useEffect(() => { const node = ref.current; node?.showModal(); node?.querySelector<HTMLElement>('h2')?.focus({preventScroll:true}); return () => { if (node?.open) node.close(); }; }, []);
+  // Back closes the sheet, not the tab: the sheet owns one history entry. A sheet closed another way marks that entry skip, and main.tsx steps over it.
+  const closing = useRef(close); closing.current = close;
+  useEffect(() => {
+    const id = crypto.randomUUID(); history.pushState({ sheet: id }, ''); sheetHistory.skipHash = null;
+    const pop = () => { if (history.state?.sheet !== id) closing.current(); };
+    window.addEventListener('popstate', pop);
+    return () => { window.removeEventListener('popstate', pop); if (history.state?.sheet === id) { history.replaceState({ skip: true }, ''); sheetHistory.skipHash = location.hash; } };
+  }, []);
   return <dialog ref={ref} onCancel={close} onClick={event=>{if(event.target===ref.current){const rect=ref.current!.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)close();}}} aria-label={title} className="sheet"><header><h2 tabIndex={-1}>{title}</h2><button onClick={close}>Close</button></header><div className="undo-slot"><UndoBar inSheet/></div>{children}</dialog>;
 }
 

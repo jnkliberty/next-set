@@ -22,7 +22,9 @@ export function SwitchProgram({data,run,choose,create,close}:any) {
 export function WorkoutPicker({data,run,local,refresh,fail,close,startDay,started,date=todayDate(),extraOnly=false}:any) {
   const [programId,setProgramId]=useState(run?.program_id??live(data.program)[0]?.id??''), [dayId,setDayId]=useState('');
   const [custom,setCustom]=useState(false),[busy,setBusy]=useState(false),[extra,setExtra]=useState(extraOnly);
-  const days=live(data.program_day).filter((day:Row)=>day.program_id===programId).sort((a:Row,b:Row)=>a.position-b.position);
+  // Empty program days cannot start, so only days with exercises are offered.
+  const filled=new Set(live(data.slot).map((slot:Row)=>slot.program_day_id)), programs=live(data.program);
+  const days=live(data.program_day).filter((day:Row)=>day.program_id===programId&&filled.has(day.id)).sort((a:Row,b:Row)=>a.position-b.position);
   const day=days.find((own:Row)=>own.id===dayId), exercises=byId(data.exercise);
   const done=new Set(live(data.run_event).filter((row:Row)=>row.run_id===run?.id&&['done','skipped'].includes(row.kind)).map((row:Row)=>row.position));
   const borrowed=extraOnly||extra||!run||run.status==='paused'||programId!==run.program_id||done.has(day?.position);
@@ -37,9 +39,10 @@ export function WorkoutPicker({data,run,local,refresh,fail,close,startDay,starte
   }
   if(custom)return <WorkoutEditor data={data} local={local} run={run} day={null} session={null} state={{action:'add',extraDate:date}} refresh={refresh} fail={fail} close={close} created={started}/>;
   return <Sheet title={extraOnly?'Add workout':'Train another day'} close={close}>
-    <label>Program<select value={programId} onChange={event=>{setProgramId(event.target.value);setDayId('');}}>{live(data.program).map((row:Row)=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
-    <div className="card list">{days.map((own:Row)=><button className="list-row" key={own.id} aria-pressed={own.id===dayId} onClick={()=>setDayId(own.id)}><span className="row-main"><strong>{dayFocus(data,own)}</strong><small>Week {own.week??1} · Day {own.day??own.position+1}</small></span><span>{own.id===dayId?<><Icon name="check"/>Selected</>:programId===run?.program_id&&done.has(own.position)?'Done':<Icon name="next"/>}</span></button>)}</div>
-    <Button onClick={()=>setCustom(true)}>Extra sets only</Button>
+    <Button primary={!days.length} onClick={()=>setCustom(true)}>Choose exercises</Button><p className="muted">Log any exercises without a program.</p>
+    {programs.length>0&&<><h3>Or repeat a program day</h3><label>Program<select value={programId} onChange={event=>{setProgramId(event.target.value);setDayId('');}}>{programs.map((row:Row)=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+    {!days.length&&<p className="muted">This program has no days with exercises yet.</p>}</>}
+    {days.length>0&&<div className="card list">{days.map((own:Row)=><button className="list-row" key={own.id} aria-pressed={own.id===dayId} onClick={()=>setDayId(own.id)}><span className="row-main"><strong>{dayFocus(data,own)}</strong><small>Week {own.week??1} · Day {own.day??own.position+1}</small></span><span>{own.id===dayId?<><Icon name="check"/>Selected</>:programId===run?.program_id&&done.has(own.position)?'Done':<Icon name="next"/>}</span></button>)}</div>}
     {day&&<><h3>{borrowed?'Extra workout':`Train ${workoutLabel(day)}`}</h3><p>{slots.length} exercises · {dateText(date)}</p>
       {!extraOnly&&programId===run?.program_id&&!done.has(day.position)&&<label className="checkbox"><span>Keep this as an extra workout</span><input type="checkbox" checked={extra} onChange={event=>setExtra(event.target.checked)}/></label>}
       <p>{borrowed?'The program and its dates stay unchanged.':'Other unfinished workouts stay next. Nothing is skipped.'}</p>

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { boundedWeightPoints, cachedWeightMatches, dailyWeightPoints, validBodyWeightSeries, weightRange } from '../domain/body-weight.js';
 import { dateTime } from '../domain/progress.js';
-import { dateText } from './ui';
+import { dateText, dateTimeText } from './ui';
 
 const CACHE_KEY = 'health-body-weight';
 const kg = (grams: number) => grams / 1000;
@@ -68,7 +68,7 @@ export function BodyWeight({ local, from, to, requestFrom = from, allHistory = f
   const covered = !!series && series.interval.from <= query.from && series.interval.to >= query.to;
   const unavailable = state.available === false || state.unavailable;
   const start = dateTime(from), end = dateTime(to), domain = start === end ? [start - 43200000, end + 43200000] : [start, end];
-  const savedText = saved ? `Saved ${new Date(saved.savedAt).toLocaleString()}.` : '';
+  const savedText = saved ? `Saved ${dateTimeText(saved.savedAt)}.` : '';
   const coverageText = series && !covered ? ` Saved dates cover ${series.interval.from} to ${series.interval.to}; this range has gaps.` : '';
   return <section className="progress-panel body-weight" aria-label="Body weight">
     <div className="chart-heading"><h2>Body weight</h2><span className="chart-label">Health readings</span></div>

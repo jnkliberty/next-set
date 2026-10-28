@@ -242,6 +242,7 @@ def superset(engine, url):
         row.get_by_role('textbox', name='Set 2 weight in lb', exact=True).fill('137.79')
         row.get_by_label('Set 2 reps',exact=True).fill('6')
         row.get_by_role('button', name='Log set 2', exact=True).click()
+        page.locator('.cta').get_by_role('button', name='Finish workout', exact=True).click()
         expect(page.get_by_role('heading', name='Workout complete', exact=True)).to_be_visible()
         expect(page.get_by_role('timer')).to_have_count(0)
         logged = [r for r in rows(page, 'set') if r.get('done_at') and not r['id'].startswith('past-')]

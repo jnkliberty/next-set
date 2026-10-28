@@ -168,7 +168,8 @@ details{background:var(--card);border-radius:var(--r-card);padding:0 var(--s3)}
 .notes label{margin:var(--s2) 0}
 .finish h2{margin-bottom:var(--s3)}
 .finish .primary{margin:var(--s3) 0 0}
-.add-set{display:block;width:100%;min-height:44px;margin-top:var(--s2);border-radius:10px;color:var(--ink);font-weight:600;font-size:var(--text-sub);background:var(--accent-soft)}
+.set-actions{display:flex;gap:var(--s2)}
+.add-set{display:block;width:100%;flex:1;min-height:44px;margin-top:var(--s2);border-radius:10px;color:var(--ink);font-weight:600;font-size:var(--text-sub);background:var(--accent-soft)}
 .eyebrow.group{color:var(--accent);margin:0 0 var(--s0)}
 .finish-early{align-self:center;color:var(--ink-muted)}
 .rest-bar{--glow:var(--ember);position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--s3) + env(safe-area-inset-bottom,0px));width:calc(min(100%,480px) - 2 * var(--s3));z-index:4;padding:var(--s3);border-radius:20px;background:var(--card);box-shadow:var(--edge),inset 0 -40px 56px -32px var(--glow),0 8px 32px rgba(0,0,0,.18)}
@@ -296,6 +297,10 @@ figcaption{color:var(--ink-muted);margin-top:var(--s2);font-size:var(--text-sub)
 .stat-tiles div{background:var(--card);border-radius:var(--r-card);padding:var(--s3);display:flex;flex-direction:column;gap:var(--s1)}
 .stat-tiles strong{display:flex;align-items:center;gap:var(--s1);font-size:var(--text-large);line-height:1;font-weight:600;letter-spacing:-.03em}
 .stat-tiles strong .icon{color:var(--ink-muted)}
+.stat-tiles strong.fit{display:block;white-space:nowrap;overflow:hidden;min-width:0}
+.stat-tiles strong.fit-1{font-size:var(--text-title)}
+.stat-tiles strong.fit-2{font-size:var(--text-body)}
+.stat-tiles strong.fit-3{font-size:var(--text-sub)}
 .stat-tiles .of{font-size:var(--text-sub);font-weight:400;letter-spacing:0;color:var(--ink-muted)}
 .stat-tiles small{font-size:var(--text-caption);font-weight:400;color:var(--ink-muted)}
 .progress-card>div{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s2);margin-bottom:var(--s3)}
@@ -343,6 +348,9 @@ figcaption{color:var(--ink-muted);margin-top:var(--s2);font-size:var(--text-sub)
 .card.list .day-item+.day-item,details .day-item+.day-item{box-shadow:0 -1px 0 var(--line)}
 .switcher{display:flex;align-items:center;gap:var(--s1);min-height:44px;padding:0;background:none;color:inherit;text-align:left}
 .switcher h1{margin:0}
+.switcher{min-width:0;max-width:100%}
+h1,h2,h3,strong,.list-row,.row-main{overflow-wrap:anywhere;min-width:0}
+.app:has(>.undo-bar) #content{padding-bottom:calc(var(--s6) + var(--s3))}
 .switcher svg{width:24px;height:24px;color:var(--ink-muted)}
 .hero{--glow:var(--cobalt);padding:var(--s4);display:flex;flex-direction:column;gap:var(--s2)}
 .hero-head{display:flex;justify-content:space-between;align-items:center;gap:var(--s2)}
@@ -353,7 +361,7 @@ figcaption{color:var(--ink-muted);margin-top:var(--s2);font-size:var(--text-sub)
 .split>*{margin:0}
 .undo-bar{position:fixed;left:var(--s3);right:var(--s3);bottom:calc(152px + env(safe-area-inset-bottom,0px));z-index:5;max-width:448px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;gap:var(--s3);min-height:48px;padding:0 var(--s2) 0 var(--s3);border-radius:12px;background:var(--ink);color:var(--canvas);font-size:var(--text-sub)}
 .undo-bar button{min-height:44px;padding:0 var(--s2);background:none;color:inherit;font-weight:700;text-decoration:underline;text-underline-offset:3px}
-.undo-slot{position:sticky;top:0;z-index:1}
+.undo-slot{position:sticky;top:calc(56px - var(--s2));z-index:1}
 .undo-slot:empty{display:none}
 .undo-slot .undo-bar{position:static;margin:0 0 var(--s2)}
 .tabs button{position:relative}
@@ -414,6 +422,6 @@ figcaption{color:var(--ink-muted);margin-top:var(--s2);font-size:var(--text-sub)
   .screen-progress .period-controls{max-width:400px}
   .screen-progress figure{max-width:680px}
   .screen-lift{max-width:920px;padding-left:var(--s5)}
-  .sheet{width:min(720px,100%);max-width:720px}
+  .sheet{width:min(720px,100%);max-width:720px;margin:auto;border-radius:20px}
   .undo-bar{bottom:var(--s4)}
 }

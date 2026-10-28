@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { byId, exerciseIdentity, live, trainingRows } from '../domain/model.js';
 import { addExtraSets, editWorkout } from '../domain/edits.js';
-import { Button, Row, Sheet, Icon } from './ui';
+import { Button, Row, Sheet, Icon, customExercise } from './ui';
 
 export function WorkoutEditor({ data, local, run, day, session, state, close, refresh, fail, created }: any) {
   const target=state.slot, initial=currentSets(data,target);
@@ -13,18 +13,24 @@ export function WorkoutEditor({ data, local, run, day, session, state, close, re
   const since=Date.now()-56*86400000, freq=new Map();
   for(const row of trainingRows(data).filter((row:Row)=>row.started_at>=since))freq.set(row.exercise_id,(freq.get(row.exercise_id)||0)+row.sets.length);
   const all=[...exercises.values()].filter((row:Row)=>exerciseIdentity(exercises,row.id)===row.id);
-  const results=all.filter((row:Row)=>!query||row.name.toLowerCase().includes(query.toLowerCase())).sort((a:Row,b:Row)=>{
+  const results=all.filter((row:Row)=>!query.trim()||row.name.toLowerCase().includes(query.trim().toLowerCase())).sort((a:Row,b:Row)=>{
     const score=(row:Row)=>(freq.get(row.id)||0)+(row.primary.some((muscle:string)=>currentMuscles.has(muscle))?100000:0);
-    return score(b)-score(a)||a.name.localeCompare(b.name);
+    // An exact name hides Create, so it must stay inside the 12 shown results.
+    const exact=(row:Row)=>Number(row.name.toLowerCase()===query.trim().toLowerCase());
+    return exact(b)-exact(a)||score(b)-score(a)||a.name.localeCompare(b.name);
   }).slice(0,query?12:5);
   async function apply(scope:string){
     if(busy)return;setBusy(true);
     try{const edit={day,run,session,slot:target,action,exerciseId,count,low,high,type,seconds,scope};const result=state.extraDate?addExtraSets(data,run,state.extraDate,edit):editWorkout(data,edit);await local.save(result.changes);await refresh();local.sync();close();if(state.extraDate)created?.(result.sessionId);}catch(error){fail(error.message||'The workout edit did not save.');}finally{setBusy(false);}
   }
+  async function create(){
+    if(busy)return;setBusy(true);const row=customExercise(query);
+    try{await local.save([{table:'exercise',row}]);local.sync();setExercise(row.id);setStep(action==='swap'?'reach':'configure');}catch{fail('The exercise did not save. Try again.');}finally{setBusy(false);}
+  }
   function chooseAction(value:string){setAction(value);setStep(value==='swap'?'search':value==='remove'||value==='move'?'reach':'configure');}
   return <Sheet title={step==='reach'?'Where does this change go?':step==='configure'?'Sets and reps':step==='search'?(action==='swap'?'Swap exercise':'Add exercise'):target?.name??exercises.get(target?.exercise_id)?.name??'Edit workout'} close={close}>
     {step==='menu'?<>{[['swap','Swap exercise'],['sets','Change sets'],['move','Move earlier'],['remove','Remove exercise']].map(([key,label])=><Button key={key} onClick={()=>chooseAction(key)}>{label}</Button>)}<label>Program note<textarea defaultValue={target?.pinned_note??''} onBlur={event=>{const table=target.session_id?'session_slot':'slot';local.save([{table,row:{id:target.id,pinned_note:event.target.value}}]).then(()=>local.sync()).catch(()=>fail('The note did not save.'));}}/></label></>:
-    step==='search'?<><label>Find an exercise<input type="search" autoFocus placeholder="Exercise name" value={query} onChange={event=>setQuery(event.target.value)}/></label>{results.map((exercise:Row)=><button className="list-row" key={exercise.id} onClick={()=>{setExercise(exercise.id);setStep(action==='swap'?'reach':'configure');}}><strong>{exercise.name}</strong><span>{exercise.equipment}</span></button>)}{!results.length&&<p>No matching exercise. Try a shorter name.</p>}</>:
+    step==='search'?<><label>Find an exercise<input type="search" autoFocus placeholder="Exercise name" maxLength={200} value={query} onChange={event=>setQuery(event.target.value)}/></label>{results.map((exercise:Row)=><button className="list-row" key={exercise.id} onClick={()=>{setExercise(exercise.id);setStep(action==='swap'?'reach':'configure');}}><strong>{exercise.name}</strong><span>{exercise.equipment}</span></button>)}{query.trim()&&!results.some((row:Row)=>row.name.toLowerCase()===query.trim().toLowerCase())&&<Button onClick={create}>Create “{query.trim()}”</Button>}{!results.length&&<p>{all.length?'No match. Select Create, or try a shorter name.':'No exercises yet. Type a name above, then select Create.'}</p>}</>:
     step==='configure'?<><h3>{exerciseId?exercises.get(exerciseId)?.name:target?.name}</h3><Stepper label="Sets" value={count} set={setCount} min={1} max={8}/><label>Set type<select value={type} onChange={event=>setType(event.target.value)}>{[['working','Working'],['warmup','Warm-up'],['drop','Drop set'],['rest_pause','Rest-pause'],['failure','To failure'],['timed','Timed interval']].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{type==='timed'&&<label>Seconds<input type="number" min="1" max="9999" value={seconds} onChange={event=>setSeconds(Number(event.target.value))}/></label>}<Stepper label="Minimum reps" value={low} set={setLow} min={1} max={high}/><Stepper label="Maximum reps" value={high} set={setHigh} min={low} max={99}/><Button primary onClick={()=>setStep('reach')}>Next</Button></>:
     <>{(state.extraDate||session?.program_day_id===null?[['today','Today only']]:[['today','Today only'],['future',`Day ${day?.day??1} from now on`],['program',`Day ${day?.day??1} in every week`]]).map(([scope,label])=><Button key={scope} disabled={busy} onClick={()=>apply(scope)}>{label}</Button>)}</>}
   </Sheet>;
